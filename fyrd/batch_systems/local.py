@@ -387,6 +387,21 @@ def start_server():
 def get_server_uri(start=True):
     """Check status and return a server URI."""
     check_conf()
+    # Remote queue server (Pyro4)
+    if not _WE_ARE_A_SERVER and not _os.path.isfile(PID_FILE):
+        if _os.path.isfile(URI_FILE):
+            with open(URI_FILE) as fin:
+                return fin.read().strip()
+        else:
+            uri = get_uri()
+            if uri is None:
+                if start:
+                    raise QueueError('Cannot reach to remote queue server')
+                else:
+                    return False
+            else:
+                return uri
+
     if (_WE_ARE_A_SERVER or not start) and not _os.path.isfile(PID_FILE):
         return False
     if not _os.path.isfile(PID_FILE):
@@ -1071,6 +1086,8 @@ def get_uri():
     if curi:
         t = _test_uri(curi)
         if t == 'connected':
+            with open(URI_FILE, 'w') as fout:
+                fout.write(str(curi))
             return curi
         if t == 'invalid':
             _conf.set_option('local', 'server_uri', None)
@@ -1278,6 +1295,13 @@ def queue_test(warn=True):
     -------
     batch_system_functional : bool
     """
+    # Check for a remote server_uri is running
+    _logme.log('Checking for a remote queue server_uri (Pyro4)', 'debug')
+    uri = get_uri()
+    if uri is not None:
+        _logme.log('Remote queue server is running at {}'.format(uri), 'debug')
+        return True
+
     log_level = 'error' if warn else 'debug'
     try:
         if not server_running():
