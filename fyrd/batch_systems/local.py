@@ -1108,7 +1108,7 @@ def _test_uri(uri):
     try:
         p = Pyro4.Proxy(uri)
     except Pyro4.errors.PyroError:
-        _logme.log('URI {0} in an invalid URI', 'error')
+        _logme.log('URI {0} in an invalid URI'.format(uri), 'error')
         return 'invalid'
     try:
         if p._pyroBind():
@@ -1121,7 +1121,7 @@ def _test_uri(uri):
             p._pyroRelease()
         return out
     except Pyro4.errors.CommunicationError:
-        _logme.log('URI {0} is not connected', 'warn')
+        _logme.log('URI {0} is not connected'.format(uri), 'warn')
         return 'disconnect'
 
 
@@ -1358,20 +1358,19 @@ def gen_scripts(job_object, command, args, precmd, modstr):
     None
         Would be the exec_script, not used here.
     """
-    scrpt = _os.path.join(
-        job_object.scriptpath,
-        '{0}.{1}.{2}'.format(job_object.name, job_object.suffix, SUFFIX)
-    )
+    scrpt = '{0}.{1}.{2}'.format(job_object.name, job_object.suffix, SUFFIX)
 
+    job_object._mode = 'remote'
     sub_script = _scrpts.CMND_RUNNER_TRACK.format(
         precmd=precmd, usedir=job_object.runpath, name=job_object.name,
         command=command
     )
-    return _Script(script=sub_script, file_name=scrpt), None
+    job_object._mode = 'local'
+    return _Script(script=sub_script, file_name=scrpt, job=job_object), None
 
 
-def submit(file_name, dependencies=None, job=None, args=None, kwds=None):
-    """Submit any file with dependencies.
+def submit(script, dependencies=None, job=None, args=None, kwds=None):
+    """Submit any script with dependencies.
 
     .. note:: this function can only use the following fyrd keywords:
         cores, name, outfile, errfile, runpath
@@ -1381,18 +1380,14 @@ def submit(file_name, dependencies=None, job=None, args=None, kwds=None):
         2. args
         3. kwds
 
-    Any keyword in a later position will overwrite the earlier position. ie.
-    'name' in kwds would overwrite 'name' in args which would overwrite 'name'
-    in Job.
-
     None of these keywords are required. If they do not exist, cores is set to
     1, name is set to `file_name`, no runpath is used, and STDOUT/STDERR are
     not saved
 
     Parameters
     ----------
-    file_name : str
-        Path to an existing file
+    script : fyrd.Script
+        Script to be submitted
     dependencies : list
         List of dependencies
     job : fyrd.job.Job, optional
@@ -1410,6 +1405,7 @@ def submit(file_name, dependencies=None, job=None, args=None, kwds=None):
     -------
     job_id : str
     """
+    job._mode = 'remote'
     params = {}
     needed_params = ['cores', 'outfile', 'errfile', 'runpath', 'name']
     if job:
@@ -1418,35 +1414,41 @@ def submit(file_name, dependencies=None, job=None, args=None, kwds=None):
         params['errfile'] = job.errfile
         params['runpath'] = job.runpath
         params['name'] = job.name
+    if args and isinstance(args[0], (list, tuple)):
+        for k, v in args:
+            if k in needed_params and k not in params:
+                params[k] = v
     if kwds:
         if not isinstance(kwds, dict):
             kwds = {k: v for k, v in [i.split(':') for i in kwds.split(',')]}
         _, extra_args = _options.options_to_string(kwds)
         for k, v in extra_args:
-            if k in needed_params:
-                params[k] = v
-    if args and isinstance(args[0], (list, tuple)):
-        for k, v in args:
-            if k in needed_params:
+            if k in needed_params and k not in params:
                 params[k] = v
     if 'cores' not in params:
         params['cores'] = 1
     if 'name' not in params:
-        params['name'] = _os.path.basename(file_name)
+        params['name'] = _os.path.basename(script.file_name)
     for param in needed_params:
         if param not in params:
             params[param] = None
     # Submit the job
     server = get_server()
-    if not _os.path.isfile(file_name):
+    job._mode = 'local'
+    if not _os.path.isfile(script.file_name):
         raise QueueError('File {0} does not exist, cannot submit'
-                         .format(file_name))
-    command = 'bash {0}'.format(_os.path.abspath(file_name))
+                         .format(script.file_name))
+    job._mode = 'remote'
+    command = 'bash {0}'.format(script.file_name)
+    _logme.log("Submitting job '{}' with params: {}".format(command,
+                                                            str(params)),
+               'debug')
     jobno = server.submit(
         command, params['name'], threads=params['cores'],
         dependencies=dependencies, stdout=params['outfile'],
         stderr=params['errfile'], runpath=params['runpath']
     )
+    job._mode = 'local'
     return str(jobno)
 
 

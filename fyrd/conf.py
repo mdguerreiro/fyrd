@@ -694,8 +694,9 @@ def get_job_paths(kwds):
     scriptpath : sctr
         The path where job script files will be stored
     """
-    runpath = _os.path.abspath(kwds['dir'] if 'dir' in kwds else '.')
-    kwds['dir'] = runpath
+    runpath = _os.path.abspath(kwds['runpath'] if 'runpath' in kwds else '.')
+    if 'localpath' not in kwds:
+        kwds['localpath'] = runpath
 
     # Set the output path
     cpath = get_option('jobs', 'outpath')
@@ -704,8 +705,7 @@ def get_job_paths(kwds):
     elif cpath:
         outpath = cpath
     else:
-        outpath = runpath
-    outpath = _os.path.abspath(outpath)
+        outpath = ''
 
     # Set the script path
     cpath = get_option('jobs', 'scriptpath')
@@ -714,8 +714,7 @@ def get_job_paths(kwds):
     elif cpath:
         scriptpath = cpath
     else:
-        scriptpath = outpath
-    scriptpath = _os.path.abspath(scriptpath)
+        scriptpath = ''
 
     return kwds, runpath, outpath, scriptpath
 

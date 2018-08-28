@@ -229,6 +229,9 @@ class Job(object):
     scripts_ready = False
     _kwargs       = None
 
+    # Mode of job preparation: local or remote
+    _mode         = 'local'
+
     # Auto Cleaning
     clean_files   = _conf.get_option('jobs', 'clean_files')
     clean_outputs = _conf.get_option('jobs', 'clean_outputs')
@@ -422,6 +425,79 @@ class Job(object):
         """Return stderr."""
         return self.get_stderr()
 
+    @property
+    def runpath(self):
+        if self._mode == 'remote':
+            runpath = self._runpath
+        else:
+            runpath = self.kwds['localpath']
+        return runpath
+
+    @runpath.setter
+    def runpath(self, value):
+        self._runpath = value
+
+    @property
+    def scriptpath(self):
+        if self._mode == 'remote':
+            scriptpath = _os.path.join(self._runpath, self._scriptpath)
+        else:
+            scriptpath = _os.path.join(self.kwds['localpath'], self._scriptpath)
+        return scriptpath
+
+    @scriptpath.setter
+    def scriptpath(self, value):
+        self._scriptpath = value
+
+    @property
+    def outpath(self):
+        if self._mode == 'remote':
+            outpath = _os.path.join(self._runpath, self._outpath)
+        else:
+            outpath = _os.path.join(self.kwds['localpath'], self._outpath)
+        return outpath
+
+    @outpath.setter
+    def outpath(self, value):
+        self._outpath = value
+
+    @property
+    def outfile(self):
+        if self._outfile:
+            outfile = _os.path.join(self.outpath, self._outfile)
+            return outfile
+        else:
+            return None
+
+    @outfile.setter
+    def outfile(self, value):
+        self._outfile = value
+
+    @property
+    def errfile(self):
+        if self._errfile:
+            errfile = _os.path.join(self.outpath, self._errfile)
+            return errfile
+        else:
+            return None
+
+    @errfile.setter
+    def errfile(self, value):
+        self._errfile = value
+
+    @property
+    def poutfile(self):
+        if self._poutfile:
+            poutfile = _os.path.join(self.outpath, self._poutfile)
+            return poutfile
+        else:
+            return None
+
+    @poutfile.setter
+    def poutfile(self, value):
+        self._poutfile = value
+
+
     ###############################
     #  Core Job Handling Methods  #
     ###############################
@@ -479,20 +555,14 @@ class Job(object):
         # Set output files
         if 'outfile' in kwds:
             pth, fle = _os.path.split(kwds['outfile'])
-            if not pth:
-                pth = self.outpath
-            kwds['outfile'] = _os.path.join(pth, fle)
+            kwds['outfile'] = fle
         else:
-            kwds['outfile'] = _os.path.join(
-                self.outpath, '.'.join([self.name, self.suffix, 'out']))
+            kwds['outfile'] = '.'.join([self.name, self.suffix, 'out'])
         if 'errfile' in kwds:
             pth, fle = _os.path.split(kwds['errfile'])
-            if not pth:
-                pth = self.outpath
-            kwds['errfile'] = _os.path.join(pth, fle)
+            kwds['errfile'] = fle
         else:
-            kwds['errfile'] = _os.path.join(
-                self.outpath, '.'.join([self.name, self.suffix, 'err']))
+            kwds['errfile'] = '.'.join([self.name, self.suffix, 'err'])
         self.outfile = kwds['outfile']
         self.errfile = kwds['errfile']
 
@@ -546,13 +616,12 @@ class Job(object):
 
         # Function specific initialization
         if callable(command):
+            self._mode = 'remote'
             self.kind = 'function'
-            script_file = _os.path.join(
-                self.scriptpath, '{}_func.{}.py'.format(name, self.suffix)
-                )
-            self.poutfile = self.outfile + '.func.pickle'
+            script_file = '{}_func.{}.py'.format(name, self.suffix)
+            self.poutfile = _os.path.split(self.outfile)[1] + '.func.pickle'
             self.function = _Function(
-                file_name=script_file, function=command, args=args,
+                file_name=script_file, function=command, job=self, args=args,
                 kwargs=kwargs, imports=self.imports, syspaths=syspaths,
                 outfile=self.poutfile
             )
@@ -562,7 +631,9 @@ class Job(object):
                     'jobs', 'generic_python') else _sys.executable
 
             command = '{} {}'.format(executable, self.function.file_name)
+            print("Command pickle:", command)
             args = None
+            self._mode = 'local'
         else:
             self.kind = 'script'
             self.poutfile = None
@@ -706,7 +777,7 @@ class Job(object):
                                     .format(dep_check))
 
         self.id = self.batch.submit(
-            self.submission.file_name,
+            self.submission,
             dependencies=depends,
             job=self, args=self.submit_args,
             kwds=additional_keywords
@@ -1130,10 +1201,10 @@ class Job(object):
         else:
             _logme.log('Job not done, attempting to get current STDOUT ' +
                        'anyway', 'info')
-        _logme.log('Getting stdout from {}'.format(self._kwargs['outfile']),
+        _logme.log('Getting stdout from {}'.format(self.outfile),
                    'debug')
-        if _os.path.isfile(self._kwargs['outfile']):
-            with open(self._kwargs['outfile']) as fin:
+        if _os.path.isfile(self.outfile):
+            with open(self.outfile) as fin:
                 stdout = fin.read()
             if stdout:
                 stdouts = stdout.strip().split('\n')
@@ -1145,9 +1216,9 @@ class Job(object):
                     self.get_exitcode(update=False, stdout=stdout)
                 stdout  = '\n'.join(stdouts[2:-3]) + '\n'
             if delete_file is True or self.clean_files is True:
-                _logme.log('Deleting {}'.format(self._kwargs['outfile']),
+                _logme.log('Deleting {}'.format(self.outfile),
                            'debug')
-                _os.remove(self._kwargs['outfile'])
+                _os.remove(self.outfile)
             if save:
                 self._stdout = stdout
                 if self.done:
@@ -1155,7 +1226,7 @@ class Job(object):
             return stdout
         else:
             _logme.log('No file at {}, cannot get stdout'
-                       .format(self._kwargs['outfile']), 'warn')
+                       .format(self.outfile), 'warn')
             return None
 
     def get_stderr(self, save=True, delete_file=None, update=True):
@@ -1196,15 +1267,15 @@ class Job(object):
         else:
             _logme.log('Job not done, attempting to get current STDERR ' +
                        'anyway', 'info')
-        _logme.log('Getting stderr from {}'.format(self._kwargs['errfile']),
+        _logme.log('Getting stderr from {}'.format(self.errfile),
                    'debug')
-        if _os.path.isfile(self._kwargs['errfile']):
-            with open(self._kwargs['errfile']) as fin:
+        if _os.path.isfile(self.errfile):
+            with open(self.errfile) as fin:
                 stderr = fin.read()
             if delete_file is True or self.clean_files is True:
-                _logme.log('Deleting {}'.format(self._kwargs['errfile']),
+                _logme.log('Deleting {}'.format(self.errfile),
                            'debug')
-                _os.remove(self._kwargs['errfile'])
+                _os.remove(self.errfile)
             if save:
                 self._stderr = stderr
                 if self.done:
@@ -1212,7 +1283,7 @@ class Job(object):
             return stderr
         else:
             _logme.log('No file at {}, cannot get stderr'
-                       .format(self._kwargs['errfile']), 'warn')
+                       .format(self.errfile), 'warn')
             return None
 
     def get_times(self, update=True, stdout=None):
@@ -1245,15 +1316,15 @@ class Job(object):
         else:
             _logme.log('Cannot get times until job is complete.', 'warn')
             return None, None
-        _logme.log('Getting times from {}'.format(self._kwargs['outfile']),
+        _logme.log('Getting times from {}'.format(self.outfile),
                    'debug')
         if not stdout:
-            if _os.path.isfile(self._kwargs['outfile']):
-                with open(self._kwargs['outfile']) as fin:
+            if _os.path.isfile(self.outfile):
+                with open(self.outfile) as fin:
                     stdout = fin.read()
             else:
                 _logme.log('No file at {}, cannot get times'
-                           .format(self._kwargs['outfile']), 'warn')
+                           .format(self.outfile), 'warn')
                 return None
         stdouts = stdout.strip().split('\n')
         if len(stdouts) < 3 or stdouts[-3] != 'Done':
@@ -1302,8 +1373,8 @@ class Job(object):
 
         code = None
 
-        if not stdout and _os.path.isfile(self._kwargs['outfile']):
-            with open(self._kwargs['outfile']) as fin:
+        if not stdout and _os.path.isfile(self.outfile):
+            with open(self.outfile) as fin:
                 stdout = fin.read()
 
         if stdout:

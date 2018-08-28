@@ -22,10 +22,16 @@ class Script(object):
 
     written = False
 
-    def __init__(self, file_name, script):
+    @property
+    def file_name(self):
+        file_name = _os.path.join(self.job_object.scriptpath, self._file_name)
+        return file_name
+
+    def __init__(self, file_name, script, job):
         """Initialize the script and file name."""
-        self.script    = script
-        self.file_name = _os.path.abspath(file_name)
+        self.script     = script
+        self._file_name = file_name
+        self.job_object = job
 
     def write(self, overwrite=True):
         """Write the script file."""
@@ -69,7 +75,17 @@ class Function(Script):
 
     """A special Script used to run a function."""
 
-    def __init__(self, file_name, function, args=None, kwargs=None,
+    @property
+    def pickle_file(self):
+        pickle_file = _os.path.join(self.job_object.scriptpath, self._pickle_file)
+        return pickle_file
+
+    @property
+    def outfile(self):
+        outfile = _os.path.join(self.job_object.scriptpath, self._outfile)
+        return outfile
+
+    def __init__(self, file_name, function, job, args=None, kwargs=None,
                  imports=None, syspaths=None, pickle_file=None, outfile=None):
         """Create a function wrapper.
 
@@ -124,8 +140,9 @@ class Function(Script):
                      + impts)
 
         # Set file names
-        self.pickle_file = pickle_file if pickle_file else file_name + '.pickle.in'
-        self.outfile     = outfile if outfile else file_name + '.pickle.out'
+        self.job_object   = job
+        self._pickle_file = pickle_file if pickle_file else file_name + '.pickle.in'
+        self._outfile     = outfile if outfile else file_name + '.pickle.out'
 
         # Create script text
         script = '#!{}\n'.format(_sys.executable)
@@ -135,7 +152,7 @@ class Function(Script):
                                              pickle_file=self.pickle_file,
                                              out_file=self.outfile)
 
-        super(Function, self).__init__(file_name, script)
+        super(Function, self).__init__(file_name, script, job)
 
     def write(self, overwrite=True):
         """Write the pickle file and call the parent Script write function."""

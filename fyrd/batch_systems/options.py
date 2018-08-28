@@ -80,12 +80,16 @@ COMMON  = _OD([
       'default': None, 'type': list}),
     ('scriptpath',
      {'help': 'Folder to write cluster script files to, must be accessible ' +
-              'to the compute nodes.',
+              'to the compute nodes. Relative to runpath/localpath.',
       'default': '.', 'type': str}),
     ('outpath',
      {'help': 'Folder to write cluster output files to, must be accessible ' +
-              'to the compute nodes.',
+              'to the compute nodes. Relative to runpath/localpath.',
       'default': '.', 'type': str}),
+    ('localpath',
+     {'help': 'The local working directory for the job, must be ' +
+              'accessible to the compute nodes by the runpath.',
+      'default': None, 'type': str}),
     ('runpath',
      {'help': 'The working directory for the job',
       'default': '.', 'type': str,
