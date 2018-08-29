@@ -277,7 +277,7 @@ class Job(object):
 
         # Path handling
         [
-            kwds, self.runpath, self.outpath, self.scriptpath
+            kwds, self.runpath, self.localpath, self.outpath, self.scriptpath
         ] = _conf.get_job_paths(kwds)
 
         # Save command
@@ -430,7 +430,7 @@ class Job(object):
         if self._mode == 'remote':
             runpath = self._runpath
         else:
-            runpath = self.kwds['localpath']
+            runpath = self.localpath
         return runpath
 
     @runpath.setter
@@ -442,7 +442,7 @@ class Job(object):
         if self._mode == 'remote':
             scriptpath = _os.path.join(self._runpath, self._scriptpath)
         else:
-            scriptpath = _os.path.join(self.kwds['localpath'], self._scriptpath)
+            scriptpath = _os.path.join(self.localpath, self._scriptpath)
         return scriptpath
 
     @scriptpath.setter
@@ -454,7 +454,7 @@ class Job(object):
         if self._mode == 'remote':
             outpath = _os.path.join(self._runpath, self._outpath)
         else:
-            outpath = _os.path.join(self.kwds['localpath'], self._outpath)
+            outpath = _os.path.join(self.localpath, self._outpath)
         return outpath
 
     @outpath.setter
@@ -619,19 +619,21 @@ class Job(object):
             self._mode = 'remote'
             self.kind = 'function'
             script_file = '{}_func.{}.py'.format(name, self.suffix)
-            self.poutfile = _os.path.split(self.outfile)[1] + '.func.pickle'
-            self.function = _Function(
-                file_name=script_file, function=command, job=self, args=args,
-                kwargs=kwargs, imports=self.imports, syspaths=syspaths,
-                outfile=self.poutfile
-            )
-            # Collapse the _command into a python call to the function script
+
+            # Get the python interpreter on the server side
             executable = '#!/usr/bin/env python{}'.format(
                 _sys.version_info.major) if _conf.get_option(
-                    'jobs', 'generic_python') else _sys.executable
+                    'jobs', 'generic_python') else self.batch.python()
 
+            self.poutfile = _os.path.split(self.outfile)[1] + '.func.pickle'
+            self.function = _Function(
+                file_name=script_file, python=executable,
+                function=command, job=self, args=args, kwargs=kwargs,
+                imports=self.imports, syspaths=syspaths, outfile=self.poutfile
+            )
+
+            # Collapse the _command into a python call to the function script
             command = '{} {}'.format(executable, self.function.file_name)
-            print("Command pickle:", command)
             args = None
             self._mode = 'local'
         else:

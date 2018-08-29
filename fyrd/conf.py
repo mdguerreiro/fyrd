@@ -688,15 +688,19 @@ def get_job_paths(kwds):
         A modified version of the input kwds dictionary with path requests
         removed
     runpath : sctr
-        The path where the job will execute
+        The absolute path where the job will execute on the server
+    localpath : sctr
+        The absolute path where the job will be created on the client
     outpath : sctr
-        The path where job outputs will go
-    scriptpath : sctr
-        The path where job script files will be stored
+        The relative path where job outputs will go
+    scriptpath : sct
+        The relative path where job script files will be stored
     """
     runpath = _os.path.abspath(kwds['runpath'] if 'runpath' in kwds else '.')
-    if 'localpath' not in kwds:
-        kwds['localpath'] = runpath
+    if 'localpath' in kwds:
+        localpath = kwds.pop('localpath')
+    else:
+        localpath = runpath
 
     # Set the output path
     cpath = get_option('jobs', 'outpath')
@@ -716,7 +720,7 @@ def get_job_paths(kwds):
     else:
         scriptpath = ''
 
-    return kwds, runpath, outpath, scriptpath
+    return kwds, runpath, localpath, outpath, scriptpath
 
 
 ###############################################################################

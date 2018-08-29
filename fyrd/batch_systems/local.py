@@ -601,6 +601,7 @@ class QueueManager(object):
         QueueError
             If a dependency is not in the job db already or command is invalid
         """
+        _logme.log('Submitting: {}'.format(str(locals())), 'debug')
         session = self.db.get_session()
         threads = int(threads)
         if not isinstance(command, (_str, _txt)):
@@ -747,6 +748,14 @@ class QueueManager(object):
         self.inqueue.put('available_cores')
         cores = self.outqueue.get()
         return int(cores)
+
+    @Pyro4.expose
+    @property
+    def python(self):
+        """Return the python interpreter on the server"""
+        self.inqueue.put('python')
+        python = _run.which(sys.executable)
+        return python
 
     ##########################################################################
     #                          Database Management                           #
@@ -1333,6 +1342,17 @@ def normalize_state(state):
 ###############################################################################
 #                               Job Submission                                #
 ###############################################################################
+
+
+def python():
+    """Return the python interpreter path on the server side.
+
+    Returns
+    -------
+    python : python interpreter path
+    """
+    server = get_server()
+    return server.python
 
 
 def gen_scripts(job_object, command, args, precmd, modstr):

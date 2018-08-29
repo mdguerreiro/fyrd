@@ -77,7 +77,8 @@ class Function(Script):
 
     @property
     def pickle_file(self):
-        pickle_file = _os.path.join(self.job_object.scriptpath, self._pickle_file)
+        pickle_file = _os.path.join(self.job_object.scriptpath,
+                                    self._pickle_file)
         return pickle_file
 
     @property
@@ -85,7 +86,7 @@ class Function(Script):
         outfile = _os.path.join(self.job_object.scriptpath, self._outfile)
         return outfile
 
-    def __init__(self, file_name, function, job, args=None, kwargs=None,
+    def __init__(self, file_name, python, function, job, args=None, kwargs=None,
                  imports=None, syspaths=None, pickle_file=None, outfile=None):
         """Create a function wrapper.
 
@@ -145,7 +146,7 @@ class Function(Script):
         self._outfile     = outfile if outfile else file_name + '.pickle.out'
 
         # Create script text
-        script = '#!{}\n'.format(_sys.executable)
+        script = '#!{}\n'.format(python)
         script += _scrpts.FUNC_RUNNER.format(name=file_name,
                                              modimpstr=func_import,
                                              imports=impts,

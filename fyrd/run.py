@@ -686,8 +686,9 @@ def which(program):
     """
     fpath, program = _os.path.split(program)
     if fpath:
-        if is_exe(program):
-            return _os.path.abspath(program)
+        exe_file = _os.path.join(fpath, program)
+        if is_exe(exe_file):
+            return _os.path.abspath(exe_file)
     else:
         for path in _os.environ["PATH"].split(_os.pathsep):
             path = path.strip('"')
