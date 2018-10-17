@@ -984,4 +984,5 @@ def default_queue(qtype=None):
         _default_queues = {}
     if qtype not in _default_queues:
         _default_queues[qtype] = Queue('self', qtype=qtype)
+    print("qtype:", qtype, _default_queues[qtype])
     return _default_queues[qtype]

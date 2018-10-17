@@ -1,25 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-A simple torque/slurm style batch submission system.
+A Pyro4 server batch submission system.
 
-Uses multiprocessing, SQLAlchemy with sqlite3, Pyro4, and daemonocle to create
-a batch system with dependency tracking.
-
-The batch system is a daemon process that is launched if not already running.
-
-Everything required for this queue is defined here. In addition, all fyrd
-parsing functions are also defined here for full integration with fyrd.
-
-Because local jobs are very simple `parse_strange_options()` strips all
-keyword arguments, the only arguments we pay attention to are:
-    outfile : STDERR goes here
-    errfile : STDERR goes here
-    cores : Sets the number of threads per process
-    depends : Job dependencies
-
-All others are ignored (although note that many others are actually handled by
-the Job object anyway).
 """
 from __future__ import print_function
 import os as _os
@@ -49,18 +32,6 @@ from six import integer_types as _int
 import psutil as _psutil
 
 import Pyro4
-
-from sqlalchemy.exc import InvalidRequestError
-
-from sqlalchemy import create_engine as _create_engine
-from sqlalchemy import Column as _Column
-from sqlalchemy import String as _String
-from sqlalchemy import Integer as _Integer
-
-from sqlalchemy.types import DateTime as _DateTime
-from sqlalchemy.orm import sessionmaker as _sessionmaker
-from sqlalchemy.orm import scoped_session as _scoped_session
-from sqlalchemy.ext.declarative import declarative_base as _base
 
 # Fyrd imports (not necessary for main functionality) no relative imports
 # as we run as a script also

@@ -253,7 +253,6 @@ CONF_HELP = {
 DEFAULT_PROFILES = {
     'DEFAULT':     {'nodes': 1,
                     'cores': 1,
-                    'mem':   4000,
                     'time':  '04:00:00'},
     'large':       {'nodes': 1,
                     'cores': 16,

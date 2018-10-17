@@ -136,7 +136,7 @@ def gen_scripts(job_object, command, args, precmd, modstr):
 
     # Create the exec_script Script object
     exec_script_obj = _Script(
-        script=exe_script, file_name=exec_script
+        script=exe_script, file_name=exec_script, job=job_object
     )
 
     ecmnd = 'srun bash {}'.format(exec_script)
@@ -144,18 +144,19 @@ def gen_scripts(job_object, command, args, precmd, modstr):
         precmd=precmd, script=exec_script, command=ecmnd
     )
 
-    submission_script = _Script(script=sub_script, file_name=scrpt)
+    submission_script = _Script(script=sub_script, file_name=scrpt,
+                                job=job_object)
 
     return submission_script, exec_script_obj
 
 
-def submit(file_name, dependencies=None, job=None, args=None, kwds=None):
-    """Submit any file with dependencies to Torque.
+def submit(script, dependencies=None, job=None, args=None, kwds=None):
+    """Submit any file with dependencies to Slurm.
 
     Parameters
     ----------
-    file_name : str
-        Path to an existing file
+    script : fyrd.Script
+        Script to be submitted
     dependencies : list
         List of dependencies
     job : fyrd.job.Job, not implemented
@@ -173,12 +174,14 @@ def submit(file_name, dependencies=None, job=None, args=None, kwds=None):
     job_id : str
     """
     _logme.log('Submitting to slurm', 'debug')
+    job._mode = 'remote'
     if dependencies:
         deps = '--dependency=afterok:{}'.format(
             ':'.join([str(d) for d in dependencies]))
-        args = ['sbatch', deps, file_name]
+        args = ['sbatch', deps, script.file_name]
     else:
-        args = ['sbatch', file_name]
+        args = ['sbatch', script.file_name]
+    job._mode = 'local'
 
     # Try to submit job 5 times
     code, stdout, stderr = _run.cmd(args, tries=5)
