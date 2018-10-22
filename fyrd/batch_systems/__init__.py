@@ -15,6 +15,9 @@ system and the get_cluster_environment() function to include autodetection.
 """
 from importlib import import_module as _import
 
+from . import slurm as _slurm
+from . import torque as _torque
+
 from .. import run as _run
 from .. import logme as _logme
 from .. import ClusterError as _ClusterError
@@ -34,10 +37,12 @@ UNCERTAIN_STATES = ['preempted', 'stopped',
 ALL_STATES = GOOD_STATES + ACTIVE_STATES + BAD_STATES + UNCERTAIN_STATES
 DONE_STATES = GOOD_STATES + BAD_STATES
 
-_default_batches = None
+_default_batches = {'slurm': [_slurm.SlurmClient, _slurm.SlurmServer],
+                    'torque': [_torque.TorqueServer, _torque.TorqueClient],
+                    'local': [None, None]}
 
 
-def get_batch_system(qtype=None):
+def get_batch_system(qtype=None, remote=False, uri=None):
     """Return a batch_system module."""
     qtype = qtype if qtype else get_cluster_environment()
     if qtype not in DEFINED_SYSTEMS:
@@ -46,13 +51,11 @@ def get_batch_system(qtype=None):
             'should be one of {0}'.format(DEFINED_SYSTEMS)
         )
     global _default_batches
-    if not _default_batches:
-        _default_batches = {}
-    if not qtype in _default_batches:
-        _default_batches[qtype] = _import(
-            'fyrd.batch_systems.{}'.format(qtype)
-        )
-    return _default_batches[qtype]
+    client, server = _default_batches[qtype]
+    if remote:
+        return client(remote=True, uri=uri)
+    else:
+        return client(remote=False, server_class=server)
 
 
 #################################

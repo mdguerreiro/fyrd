@@ -31,7 +31,7 @@ SUFFIX = 'sbatch'
 
 @Pyro4.expose
 class SlurmServer(BatchSystemServer):
-
+    NAME = 'slurm'
 
     ###########################################################################
     #                           Functionality Test                            #
@@ -97,12 +97,9 @@ class SlurmServer(BatchSystemServer):
     ###########################################################################
     #                             Job Submission                              #
     ###########################################################################
-
-
     def gen_scripts(self, job_object, command, args, precmd, modstr):
-        """Build the submission script objects.
-
-        Creates an exec script as well as a submission script.
+        """Can't create the scripts in server side since Job and Script object
+        won't be serialized correctly by Pyro4.
 
         Parameters
         ---------
@@ -124,73 +121,30 @@ class SlurmServer(BatchSystemServer):
         fyrd.script_runners.Script
             The execution script
         """
-        scrpt = _os.path.join(
-            job_object.scriptpath, '{}.{}.{}'.format(
-                job_object.name, job_object.suffix, SUFFIX
-            )
-        )
-
-        # We use a separate script and a single srun command to avoid
-        # issues with multiple threads running at once
-        exec_script  = _os.path.join(
-            job_object.scriptpath, '{}.{}.script'.format(
-                job_object.name, job_object.suffix
-            )
-        )
-        exe_script   = _scrpts.CMND_RUNNER_TRACK.format(
-            precmd=modstr, usedir=job_object.runpath, name=job_object.name,
-            command=command
-        )
-
-        # Create the exec_script Script object
-        exec_script_obj = _Script(
-            script=exe_script, file_name=exec_script, job=job_object
-        )
-
-        ecmnd = 'srun bash {}'.format(exec_script)
-        sub_script = _scrpts.SCRP_RUNNER.format(
-            precmd=precmd, script=exec_script, command=ecmnd
-        )
-
-        submission_script = _Script(script=sub_script, file_name=scrpt,
-                                    job=job_object)
-
-        return submission_script, exec_script_obj
+        raise NotImplementedError()
 
 
-    def submit(self, script, dependencies=None, job=None, args=None, kwds=None):
+    def submit(self, script_file_name, dependencies=None):
         """Submit any file with dependencies to Slurm.
 
         Parameters
         ----------
-        script : fyrd.Script
-            Script to be submitted
+        script_file_name : str
+            Path of the script to be submitted
         dependencies : list
             List of dependencies
-        job : fyrd.job.Job, not implemented
-            A job object for the calling job, not used by this functions
-        args : list, not implemented
-            A list of additional command line arguments to pass when submitting,
-            not used by this function
-        kwds : dict or str, not implemented
-            A dictionary of keyword arguments to parse with options_to_string, or
-            a string of option:value,option,option:value,.... Not used by this
-            function.
 
         Returns
         -------
         job_id : str
         """
         _logme.log('Submitting to slurm', 'debug')
-        job._mode = 'remote'
         if dependencies:
             deps = '--dependency=afterok:{}'.format(
                 ':'.join([str(d) for d in dependencies]))
-            args = ['sbatch', deps, script.file_name]
+            args = ['sbatch', deps, script_file_name]
         else:
-            args = ['sbatch', script.file_name]
-        job._mode = 'local'
-
+            args = ['sbatch', script_file_name]
         # Try to submit job 5 times
         code, stdout, stderr = _run.cmd(args, tries=5)
         if code == 0:
@@ -203,12 +157,9 @@ class SlurmServer(BatchSystemServer):
 
         return job_id
 
-
     ###########################################################################
     #                            Job Management                               #
     ###########################################################################
-
-
     def kill(self, job_ids):
         """Terminate all jobs in job_ids.
 
@@ -423,6 +374,8 @@ class SlurmClient(BatchSystemClient):
     some network overhead.
     """
 
+    NAME = 'slurm'
+
     def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""
         if '_' in job_id:
@@ -437,3 +390,91 @@ class SlurmClient(BatchSystemClient):
     def normalize_state(self, state):
         """Convert state into standadized (slurm style) state."""
         return state
+
+
+    def gen_scripts(self, job_object, command, args, precmd, modstr):
+        """Build the submission script objects.
+
+        Creates an exec script as well as a submission script.
+
+        Parameters
+        ---------
+        job_object : fyrd.job.Job
+        command : str
+            Command to execute
+        args : list
+            List of additional arguments, not used in this script.
+        precmd : str
+            String from options_to_string() to add at the top of the file,
+            should contain batch system directives
+        modstr : str
+            String to add after precmd, should contain module directives.
+
+        Returns
+        -------
+        fyrd.script_runners.Script
+            The submission script
+        fyrd.script_runners.Script
+            The execution script
+        """
+        scrpt = _os.path.join(
+            job_object.scriptpath, '{}.{}.{}'.format(
+                job_object.name, job_object.suffix, SUFFIX
+            )
+        )
+
+        # We use a separate script and a single srun command to avoid
+        # issues with multiple threads running at once
+        exec_script  = _os.path.join(
+            job_object.scriptpath, '{}.{}.script'.format(
+                job_object.name, job_object.suffix
+            )
+        )
+
+        job_object._mode = 'remote'
+        exe_script   = _scrpts.CMND_RUNNER_TRACK.format(
+            precmd=modstr, usedir=job_object.runpath, name=job_object.name,
+            command=command
+        )
+        job_object._mode = 'local'
+
+        # Create the exec_script Script object
+        exec_script_obj = _Script(
+            script=exe_script, file_name=exec_script, job=job_object
+        )
+
+        ecmnd = 'srun bash {}'.format(exec_script)
+        sub_script = _scrpts.SCRP_RUNNER.format(
+            precmd=precmd, script=exec_script, command=ecmnd
+        )
+
+        submission_script = _Script(script=sub_script, file_name=scrpt,
+                                    job=job_object)
+
+        return submission_script, exec_script_obj
+
+    def submit(self, script, dependencies=None, job=None, args=None, kwds=None):
+        """Submit any file with dependencies to Slurm.
+
+        Parameters
+        ----------
+        script : fyrd.Script
+            Script to be submitted
+        dependencies : list
+            List of dependencies
+        job : fyrd.job.Job, not implemented
+            A job object for the calling job, not used by this functions
+        args : list, not implemented
+            A list of additional command line arguments to pass when submitting,
+            not used by this function
+        kwds : dict or str, not implemented
+            A dictionary of keyword arguments to parse with options_to_string, or
+            a string of option:value,option,option:value,.... Not used by this
+            function.
+
+        Returns
+        -------
+        job_id : str
+        """
+        return self.get_server() \
+                       .submit(script.file_name, dependencies=dependencies)

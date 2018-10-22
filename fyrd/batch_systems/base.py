@@ -1,34 +1,57 @@
 from fyrd import logme as _logme
+from fyrd import conf as _conf
+
+import Pyro4
 
 class BatchSystemClient(object):
-    def __init__(self, remote=False, uri=None):
+    NAME = None
+    def __init__(self, remote=False, uri=None, server_class=None):
         """Creates a BatchSystemClient object.
         All functionalities (submit, kill, gen_scripts...) are redirected to
         the server to do it as generic as possible. If some batch system needs
+        to execute some of the moethods locally they can be overloaded.
+
+        To get the proper configuration values the ``NAME`` attribute must
+        be set in the subclasses to the batch system name (``slurm``,
+        ``local``, ``torque``...)
+
         Parameters
         ----------
             remote: bool, optional
-                Specify if the batch system will run using Pyro4, or in local
-                mode.
+                Specify if the batch system will run using Pyro4, or a local
+                object.
             uri: str, optional
                 If the batch system runs on a remote node, a Pyro4 object URI
                 can be specified.
+            server_class: class, optional
+                If the barch system runs locally, a server class must be
+                provided, where it'll be the methods to execute. It should be
+                a subclass of BatchSystemServer. Example:
+
+                .. code-block:: python
+
+                    SlurmClient(remote=False, server_class=SlurmServer)
         """
         self.remote = remote
-        self.uri = uri
 
-        self.runpath = runpath
-
-        if localpath is None:
-            self.localpath = runpath
-        else:
-            self.localpath = runpath
-
+        self.uri = None
         self.server = None
         self.connected = False
         self.max_con_retries = 2
 
-        self.connected = self.connect()
+        if self.remote:
+            if uri:
+                self.uri = uri
+            else:
+                self.uri = _conf.get_option(self.NAME, 'uri')
+                if not self.uri:
+                    raise ValueError('Can\'t find URI in config file.')
+            self.connected = self.connect()
+        elif server_class:
+            self.server = server_class()
+        else:
+            raise ValueError('No class provided for local execution. Missing '
+                              'server_class parameter.')
 
     def get_uri(self):
         """Get the URI of the remote object
@@ -60,9 +83,13 @@ class BatchSystemClient(object):
                 True if the server have been started correctly, False if not.
         """
         if not self.remote:
+            _logme.log('Trying to connect to server when not working on '
+                       'remote. Aborting.', 'warn')
             return False
 
         if self.connected and not force:
+            _logme.log('Trying to connect to server, but it\'s already '
+                       'connected. Aborting.', 'warn')
             return False
 
         uri = self.get_uri()
@@ -76,12 +103,14 @@ class BatchSystemClient(object):
         for i in range(self.max_con_retries):
             try:
                 server._pyroBind()
+                break
             except Pyro4.errors.CommunicationError:
                 # Test for bad connection
                 _logme.log("Cannot bind to server, "
                            "retrying ({}/{}).".format(i + 1,
                                                       self.max_con_retries),
                            'error')
+
 
         if i == (self.max_con_retries - 1):
             _logme.log(
@@ -91,6 +120,7 @@ class BatchSystemClient(object):
             if raise_on_error:
                 raise ConnectionError('Cannot get server')
             return False
+        _logme.log('Connected to Pyro4 server: {}'.format(uri), 'info')
         self.server = server
         return True
 
@@ -104,7 +134,7 @@ class BatchSystemClient(object):
     ###########################################################################
 
 
-    def queue_test(warn=True):
+    def queue_test(self, warn=True):
         """Check that this batch system can be used.
 
         Parameters
@@ -124,13 +154,13 @@ class BatchSystemClient(object):
     ###########################################################################
 
 
-    def normalize_job_id(job_id):
+    def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""
         server = self.get_server()
         return server.normalize_job_id(job_id)
 
 
-    def normalize_state(state):
+    def normalize_state(self, state):
         """Convert state into standadized (slurm style) state."""
         server = self.get_server()
         return server.normalize_state(state)
@@ -141,7 +171,7 @@ class BatchSystemClient(object):
     ###########################################################################
 
 
-    def gen_scripts(job_object, command, args, precmd, modstr):
+    def gen_scripts(self, job_object, command, args, precmd, modstr):
         """Build the submission script objects.
 
         This script should almost certainly work by formatting `_scrpts.CMND_RUNNER_TRACK`.
@@ -209,7 +239,7 @@ class BatchSystemClient(object):
     ###########################################################################
     #                             Job Management                              #
     ###########################################################################
-    def kill(job_ids):
+    def kill(self, job_ids):
         """Terminate all jobs in job_ids.
 
         Parameters
@@ -227,7 +257,7 @@ class BatchSystemClient(object):
     ###########################################################################
     #                              Queue Parsing                              #
     ###########################################################################
-    def queue_parser(user=None, partition=None):
+    def queue_parser(self, user=None, partition=None):
         """Iterator for queue parsing.
 
         Parameters
@@ -250,11 +280,11 @@ class BatchSystemClient(object):
         cntpernode : int or None
         exit_code : int or Nonw
         """
-        server = self.server()
+        server = self.get_server()
         return server.queue_parser(user=user, partition=partition)
 
 
-    def parse_strange_options(option_dict):
+    def parse_strange_options(self, option_dict):
         """Parse all options that cannot be handled by the regular function.
 
         Parameters
@@ -279,9 +309,14 @@ class BatchSystemClient(object):
 
 
 class BatchSystemServer(object):
+    NAME = None
     def __init__(self):
         """Creates a BatchSystemServer object.
-        Note that there're some virtual function that *MUST* be overwritten.
+        Note that there're some virtual function that **MUST** be overwritten.
+
+        To get the proper configuration values the ``NAME`` attribute must
+        be set in the subclasses to the batch system name (``slurm``,
+        ``local``, ``torque``...)
 
         Parameters
         ----------
@@ -290,11 +325,12 @@ class BatchSystemServer(object):
         self.daemon = None
 
     @classmethod
-    def daemonize(cls, self):
+    def start_server(cls):
         """Class method that created the server daemon.
         """
         obj = cls()
         obj.daemonize()
+        return obj
 
     def daemonize(self, host=None, port=None, objId=None):
         """Creates the server daemon.
@@ -309,19 +345,22 @@ class BatchSystemServer(object):
         if port:
             args['port'] = port
 
-        with Pyro4.Daemon(args**) as daemon:
+        with Pyro4.Daemon(**args) as daemon:
             if not objId:
                 objId = self.__class__.__name__
             uri = daemon.register(self, objectId=objId)
-            # TODO: Write uri to file ????
 
             print('Daemon runnig. Object uri = ', uri)
             self.running = True
+            self.daemon = daemon
             daemon.requestLoop()
+        self.running = False
 
     def shutdown(self):
         if self.running:
+            _logme.log('Pyro4 daemon shutdown.', 'info')
             self.daemon.shutdown()
+            self.running = False
 
     def is_running(self):
         return len(self.daemon.sockets) > 0
@@ -329,26 +368,26 @@ class BatchSystemServer(object):
     ###########################################################################
     #                         Pure Virtual Functions                          #
     ###########################################################################
-    def queue_test(warn=True):
-        pass
+    def queue_test(self, warn=True):
+        raise NotImplementedError()
 
-    def normalize_job_id(job_id):
-        pass
+    def normalize_job_id(self, job_id):
+        raise NotImplementedError()
 
-    def normalize_state(state):
-        pass
+    def normalize_state(self, state):
+        raise NotImplementedError()
 
-    def gen_scripts(job_object, command, args, precmd, modstr):
-        pass
+    def gen_scripts(self, job_object, command, args, precmd, modstr):
+        raise NotImplementedError()
 
-    def submit(file_name, dependencies=None, job=None, args=None, kwds=None):
-        pass
+    def submit(self, file_name, dependencies=None, job=None, args=None, kwds=None):
+        raise NotImplementedError()
 
-    def kill(job_ids):
-        pass
+    def kill(self, job_ids):
+        raise NotImplementedError()
 
-    def queue_parser(user=None, partition=None):
-        pass
+    def queue_parser(self, user=None, partition=None):
+        raise NotImplementedError()
 
-    def parse_strange_options(option_dict):
-        pass
+    def parse_strange_options(self, option_dict):
+        raise NotImplementedError()
