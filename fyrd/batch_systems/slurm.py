@@ -26,7 +26,6 @@ from .base import BatchSystemClient, BatchSystemServer
 _Script = _sscrpt.Script
 
 
-PREFIX = '#SBATCH'
 SUFFIX = 'sbatch'
 
 @Pyro4.expose
@@ -136,7 +135,10 @@ class SlurmServer(BatchSystemServer):
 
         Returns
         -------
-        job_id : str
+        results: dict
+            Dictionary containing the results and/or errors.
+            If the execution have no errors, it returns the job_id as the
+            result.
         """
         _logme.log('Submitting to slurm', 'debug')
         if dependencies:
@@ -153,9 +155,12 @@ class SlurmServer(BatchSystemServer):
             _logme.log('sbatch failed with code {}\n'.format(code) +
                        'stdout: {}\nstderr: {}'.format(stdout, stderr),
                        'critical')
-            raise _CalledProcessError(code, args, stdout, stderr)
+            #raise _CalledProcessError(code, args, stdout, stderr)
+            # TODO: ?????
+            # Pyro4 can't serialize CalledProcessError
+            return {'error': True, 'stdout': stdout, 'stderr': stderr}
 
-        return job_id
+        return {'error': False, 'result': job_id}
 
     ###########################################################################
     #                            Job Management                               #
@@ -375,6 +380,7 @@ class SlurmClient(BatchSystemClient):
     """
 
     NAME = 'slurm'
+    PREFIX = '#SBATCH'
 
     def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""

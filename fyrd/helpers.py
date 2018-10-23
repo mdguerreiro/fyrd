@@ -45,7 +45,8 @@ __all__ = ['jobify', 'parapply', 'parapply_summary', 'splitrun']
 ###############################################################################
 
 
-def jobify(name=None, profile=None, qtype=None, submit=True, **kwds):
+def jobify(name=None, profile=None, qtype=None,
+           submit=True, remote=True, uri=None, **kwds):
     """Decorator to make any function a job.
 
     Will make any function return a Job object that will execute the function
@@ -115,7 +116,7 @@ def jobify(name=None, profile=None, qtype=None, submit=True, **kwds):
         def wrapper(*args, **kwargs):
             """This will convert the function into a Job object."""
             job = _Job(func, args=args, kwargs=kwargs, name=name, qtype=qtype,
-                       profile=profile, **kwds)
+                       profile=profile, remote=remote, uri=uri, **kwds)
             jdoc = job.__doc__
             if jdoc:
                 jdoc = "\n\nJob documentation:\n\n{0}".format(jdoc)

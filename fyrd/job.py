@@ -237,7 +237,7 @@ class Job(object):
     clean_outputs = _conf.get_option('jobs', 'clean_outputs')
 
     def __init__(self, command, args=None, kwargs=None, name=None, qtype=None,
-                 profile=None, queue=None, **kwds):
+                 profile=None, queue=None, remote=True, uri=None, **kwds):
         """Initialization function arguments.
 
         Parameters
@@ -260,6 +260,11 @@ class Job(object):
             The name of a profile saved in the conf
         queue : fyrd.queue.Queue, optional
             An already initiated Queue class to use.
+        remote: bool, optional
+            If True, the job will be submitted to a remote Pyro4 object, if
+            False, the job will be executed locally without using the network.
+        uri: str, optional
+            If the job is remote, an Pyro4 URI can be specified.
         kwds
             *All other keywords are parsed into cluster keywords by the options
             system.* For available keywords see `fyrd.option_help()`
@@ -286,6 +291,12 @@ class Job(object):
         self.kwargs  = kwargs
         self.profile = profile
 
+        self.remote = remote
+        if not self.remote and uri:
+            _logme.log('Remote URI specified, but remote set to False.',
+                       'warn')
+        self.uri = uri
+
         # Get environment
         if not _batch.MODE:
             _batch.get_cluster_environment()
@@ -298,8 +309,8 @@ class Job(object):
                 )
             self.queue = queue
         else:
-            self.queue = _queue.default_queue(qtype)
-        self.batch = _batch.get_batch_system(qtype)
+            self.queue = _queue.default_queue(qtype, remote=remote, uri=uri)
+        self.batch = _batch.get_batch_system(qtype, remote=remote, uri=uri)
         self.qtype = qtype
 
         self.state = 'Not_Submitted'
@@ -778,12 +789,26 @@ class Job(object):
                                     'returned an unrecognized value {0}'
                                     .format(dep_check))
 
-        self.id = self.batch.submit(
+        results = self.batch.submit(
             self.submission,
             dependencies=depends,
             job=self, args=self.submit_args,
             kwds=additional_keywords
         )
+
+        if results['error']:
+            stdout, stderr = (results['stdout'], results['stderr'])
+            err_str = ('Error executing the job in the batch system...\n'
+                        'stdout: {0}\n'
+                        'stderr: {1}').format(stdout, stderr)
+            _logme.log(err_str,
+                       'error')
+            raise _batch.BatchSystemError(
+                    'Error executing the job in the batch system',
+                    stdout=stdout, stderr=stderr
+                    )
+
+        self.id = results['result']
 
         self.submitted = True
         self.submit_time = _dt.now()

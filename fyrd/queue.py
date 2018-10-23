@@ -113,7 +113,8 @@ class Queue(object):
         Return a dict of jobs for all all jobs by each user in users.
     """
 
-    def __init__(self, user=None, partition=None, qtype=None):
+    def __init__(self, user=None, partition=None,
+                 qtype=None, remote=True, uri=None):
         """Can filter by user, queue type or partition on initialization.
 
         Parameters
@@ -162,11 +163,13 @@ class Queue(object):
 
         # Set type
         if qtype:
-            _batch.check_queue(qtype)
+            _batch.check_queue(qtype, remote=remote, uri=uri)
         else:
-            _batch.check_queue()
+            _batch.check_queue(remote=remote, uri=uri)
         self.qtype = qtype if qtype else _batch.MODE
-        self.batch_system = _batch.get_batch_system(self.qtype)
+        self.batch_system = _batch.get_batch_system(self.qtype,
+                                                    remote=remote,
+                                                    uri=uri)
 
         # Allow tracking of updates to prevent too many updates
         self._updating = False
@@ -977,12 +980,13 @@ class QueueError(Exception):
 
 _default_queues = None
 
-def default_queue(qtype=None):
+def default_queue(qtype=None, remote=True, uri=None):
     """Return a default batch system."""
     global _default_queues
     if not _default_queues:
         _default_queues = {}
     if qtype not in _default_queues:
-        _default_queues[qtype] = Queue('self', qtype=qtype)
+        _default_queues[qtype] = Queue('self', qtype=qtype,
+                                       remote=remote, uri=uri)
     print("qtype:", qtype, _default_queues[qtype])
     return _default_queues[qtype]

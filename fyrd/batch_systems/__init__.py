@@ -17,6 +17,7 @@ from importlib import import_module as _import
 
 from . import slurm as _slurm
 from . import torque as _torque
+from .base import BatchSystemError
 
 from .. import run as _run
 from .. import logme as _logme
@@ -41,8 +42,11 @@ _default_batches = {'slurm': [_slurm.SlurmClient, _slurm.SlurmServer],
                     'torque': [_torque.TorqueServer, _torque.TorqueClient],
                     'local': [None, None]}
 
+# Save the client instances
+_client_batches = {'local': {}, 'remote': {}}
 
-def get_batch_system(qtype=None, remote=False, uri=None):
+
+def get_batch_system(qtype=None, remote=True, uri=None):
     """Return a batch_system module."""
     qtype = qtype if qtype else get_cluster_environment()
     if qtype not in DEFINED_SYSTEMS:
@@ -51,11 +55,20 @@ def get_batch_system(qtype=None, remote=False, uri=None):
             'should be one of {0}'.format(DEFINED_SYSTEMS)
         )
     global _default_batches
+    global _client_batches
+
+    remote_str = 'remote' if remote else 'local'
+    if qtype in _client_batches[remote_str].keys():
+        return _client_batches[remote_str][qtype]
+        
     client, server = _default_batches[qtype]
     if remote:
-        return client(remote=True, uri=uri)
+        _client_batches['remote'][qtype] = client(remote=True, uri=uri)
     else:
-        return client(remote=False, server_class=server)
+        _client_batches['local'][qtype] = client(remote=False,
+                                                 server_class=server)
+
+    return _client_batches[remote_str][qtype]
 
 
 #################################
@@ -123,7 +136,7 @@ def get_cluster_environment(overwrite=False):
 ##############################
 
 
-def check_queue(qtype=None):
+def check_queue(qtype=None, remote=True, uri=None):
     """Check if *both* MODE and qtype are valid.
 
     First checks the MODE global and autodetects its value, if that fails, no
@@ -172,7 +185,7 @@ def check_queue(qtype=None):
             'should be one of {0}'.format(DEFINED_SYSTEMS)
         )
     qtype = qtype if qtype else MODE
-    batch_system = get_batch_system(qtype)
+    batch_system = get_batch_system(qtype, remote=remote, uri=uri)
     return batch_system.queue_test(warn=True)
 
 

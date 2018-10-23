@@ -3,9 +3,19 @@ from fyrd import conf as _conf
 
 import Pyro4
 
+
+class BatchSystemError(Exception):
+    """Exception raised when an error is returned from the batch system
+    """
+    def __init__(self, message, stdout=None, stderr=None):
+        super(BatchSystemError, self).__init__(message)
+        self.stdout = stdout
+        self.stderr = stderr
+
+
 class BatchSystemClient(object):
     NAME = None
-    def __init__(self, remote=False, uri=None, server_class=None):
+    def __init__(self, remote=True, uri=None, server_class=None):
         """Creates a BatchSystemClient object.
         All functionalities (submit, kill, gen_scripts...) are redirected to
         the server to do it as generic as possible. If some batch system needs
@@ -350,7 +360,7 @@ class BatchSystemServer(object):
                 objId = self.__class__.__name__
             uri = daemon.register(self, objectId=objId)
 
-            print('Daemon runnig. Object uri = ', uri)
+            print('Daemon running. Object uri =', uri)
             self.running = True
             self.daemon = daemon
             daemon.requestLoop()
