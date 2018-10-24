@@ -150,7 +150,7 @@ class SlurmServer(BatchSystemServer):
         # Try to submit job 5 times
         code, stdout, stderr = _run.cmd(args, tries=5)
         if code == 0:
-            job_id, _ = normalize_job_id(stdout.split(' ')[-1])
+            job_id, _ = self.normalize_job_id(stdout.split(' ')[-1])
         else:
             _logme.log('sbatch failed with code {}\n'.format(code) +
                        'stdout: {}\nstderr: {}'.format(stdout, stderr),
@@ -269,7 +269,7 @@ class SlurmServer(BatchSystemServer):
                 try:
                     [sid, sname, suser, spartition, sstate,
                      snodelist, snodes, scpus, scode] = sinfo
-                    sid, sarr = normalize_job_id(sid)
+                    sid, sarr = self.normalize_job_id(sid)
                 except ValueError as err:
                     _logme.log('sacct parsing failed with error {} '.format(err) +
                                'due to an incorrect number of entries.\n' +
@@ -423,19 +423,16 @@ class SlurmClient(BatchSystemClient):
         fyrd.script_runners.Script
             The execution script
         """
-        scrpt = _os.path.join(
-            job_object.scriptpath, '{}.{}.{}'.format(
-                job_object.name, job_object.suffix, SUFFIX
-            )
-        )
+        scrpt = '{}.{}.{}'.format(job_object.name, job_object.suffix, SUFFIX)
 
         # We use a separate script and a single srun command to avoid
         # issues with multiple threads running at once
-        exec_script  = _os.path.join(
-            job_object.scriptpath, '{}.{}.script'.format(
-                job_object.name, job_object.suffix
-            )
-        )
+
+        exec_script  = '{}.{}.script'.format(
+                job_object.name,
+                job_object.suffix
+                )
+
 
         job_object._mode = 'remote'
         exe_script   = _scrpts.CMND_RUNNER_TRACK.format(
@@ -449,9 +446,16 @@ class SlurmClient(BatchSystemClient):
             script=exe_script, file_name=exec_script, job=job_object
         )
 
-        ecmnd = 'srun bash {}'.format(exec_script)
+        job_object._mode = 'remote'
+        remote_path = _os.path.join(
+                    job_object.runpath, job_object.scriptpath, exec_script
+                )
+        job_object._mode = 'local'
+
+        ecmnd = 'srun bash {}'.format(remote_path)
+
         sub_script = _scrpts.SCRP_RUNNER.format(
-            precmd=precmd, script=exec_script, command=ecmnd
+            precmd=precmd, script=remote_path, command=ecmnd
         )
 
         submission_script = _Script(script=sub_script, file_name=scrpt,
@@ -482,5 +486,7 @@ class SlurmClient(BatchSystemClient):
         -------
         job_id : str
         """
+        script.job_object._mode = 'remote'
         return self.get_server() \
                        .submit(script.file_name, dependencies=dependencies)
+        script.job_object._mode = 'local'

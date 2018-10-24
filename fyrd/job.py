@@ -666,6 +666,9 @@ class Job(object):
 
         # Add all of the keyword arguments at once
         opt_string, submit_args = _options.options_to_string(kwds, self.qtype)
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        print(opt_string)
+        print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
         precmd = opt_string + '\n\n' + modstr
         self.submit_args = submit_args
 
