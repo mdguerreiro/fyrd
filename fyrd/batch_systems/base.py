@@ -335,11 +335,11 @@ class BatchSystemServer(object):
         self.daemon = None
 
     @classmethod
-    def start_server(cls):
+    def start_server(cls, host=None, port=None, objId=None):
         """Class method that created the server daemon.
         """
         obj = cls()
-        obj.daemonize()
+        obj.daemonize(host=host, port=port, objID=objId)
         return obj
 
     def daemonize(self, host=None, port=None, objId=None):
