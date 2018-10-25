@@ -187,7 +187,7 @@ class SlurmServer(BatchSystemServer):
     ###########################################################################
 
 
-    def queue_parser(self, user=None, partition=None):
+    def queue_parser(self, user=None, partition=None, job_id=None):
         """Iterator for slurm queues.
 
         Use the `squeue -O` command to get standard data across implementation,
@@ -203,6 +203,8 @@ class SlurmServer(BatchSystemServer):
             User name to pass to qstat to filter queue with
         partiton : str, optional
             Partition to filter the queue with
+        job_id: str, optional
+            Job ID to filter the queue with
 
         Yields
         ------
@@ -217,6 +219,11 @@ class SlurmServer(BatchSystemServer):
         cntpernode : int or None
         exit_code : int or Nonw
         """
+        try:
+            if job_id:
+                int(job_id)
+        except ValueError:
+            job_id = None
         nodequery = _re.compile(r'([^\[,]+)(\[[^\[]+\])?')
         fwdth = 400  # Used for fixed-width parsing of squeue
         fields = [
@@ -317,6 +324,8 @@ class SlurmServer(BatchSystemServer):
             if suser.isdigit():
                 suser = _pwd.getpwuid(int(suser)).pw_name
             if user and suser != user:
+                continue
+            if job_id and (job_id != sid):
                 continue
             # Attempt to parse nodelist
             snodelist = []
@@ -487,6 +496,7 @@ class SlurmClient(BatchSystemClient):
         job_id : str
         """
         script.job_object._mode = 'remote'
-        return self.get_server() \
+        result = self.get_server() \
                        .submit(script.file_name, dependencies=dependencies)
         script.job_object._mode = 'local'
+        return result

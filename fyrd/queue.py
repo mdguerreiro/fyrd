@@ -512,14 +512,17 @@ class Queue(object):
             count -= 1
             _sleep(self.sleep_len)
 
-    def update(self):
+    def update(self, job_id=None):
         """Refresh the list of jobs from the server, limit queries."""
         if not self.last_update:
-            self._update()
+            self._update(job_id=job_id)
         elif int(_time()) - self.last_update > self.queue_update_time:
-            self._update()
+            self._update(job_id=job_id)
         else:
             _logme.log('Skipping update as last update too recent', 'debug')
+            _logme.log('Last update: {}'.format(_dt.fromtimestamp(
+                                                    self.last_update)
+                                                    ), 'debug')
         return self
 
     def get_jobs(self, key):
@@ -605,10 +608,15 @@ class Queue(object):
     # Internal Functions #
     ######################
 
-    def _update(self):
+    def _update(self, job_id=None):
         """Refresh the list of jobs from the server.
 
         This is the core queue interaction function of this class.
+
+        Parameters
+        ----------
+            job_id: str, optional
+                Job ID to be updated
         """
         if self._updating:
             return
@@ -620,7 +628,7 @@ class Queue(object):
         for [job_id, array_id, job_name, job_user, job_partition,
              job_state, job_nodelist, job_nodecount,
              job_cpus, job_exitcode] in self.batch_system.queue_parser(
-                 self.user, self.partition):
+                 user=self.user, partition=self.partition, job_id=job_id):
             job_id = str(job_id)
             job_state = job_state.lower()
             if job_nodecount and job_cpus:
@@ -980,13 +988,13 @@ class QueueError(Exception):
 
 _default_queues = None
 
-def default_queue(qtype=None, remote=True, uri=None):
+def default_queue(qtype=None, remote=True, uri=None, user=None):
     """Return a default batch system."""
     global _default_queues
     if not _default_queues:
         _default_queues = {}
     if qtype not in _default_queues:
-        _default_queues[qtype] = Queue('self', qtype=qtype,
-                                       remote=remote, uri=uri)
-    print("qtype:", qtype, _default_queues[qtype])
+        _default_queues[qtype] = Queue(
+                user, qtype=qtype, remote=remote, uri=uri
+                )
     return _default_queues[qtype]

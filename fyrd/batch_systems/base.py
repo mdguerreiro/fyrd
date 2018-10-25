@@ -267,7 +267,7 @@ class BatchSystemClient(object):
     ###########################################################################
     #                              Queue Parsing                              #
     ###########################################################################
-    def queue_parser(self, user=None, partition=None):
+    def queue_parser(self, user=None, partition=None, job_id=None):
         """Iterator for queue parsing.
 
         Parameters
@@ -276,6 +276,8 @@ class BatchSystemClient(object):
             User name to pass to qstat to filter queue with
         partiton : str, optional
             Partition to filter the queue with
+        job_id: str, optional
+            Job ID to filter the queue with
 
         Yields
         ------
@@ -291,8 +293,9 @@ class BatchSystemClient(object):
         exit_code : int or Nonw
         """
         server = self.get_server()
-        return server.queue_parser(user=user, partition=partition)
-
+        return server.queue_parser(
+                user=user, partition=partition, job_id=job_id
+                )
 
     def parse_strange_options(self, option_dict):
         """Parse all options that cannot be handled by the regular function.
@@ -339,7 +342,7 @@ class BatchSystemServer(object):
         """Class method that created the server daemon.
         """
         obj = cls()
-        obj.daemonize(host=host, port=port, objID=objId)
+        obj.daemonize(host=host, port=port, objId=objId)
         return obj
 
     def daemonize(self, host=None, port=None, objId=None):
@@ -396,7 +399,7 @@ class BatchSystemServer(object):
     def kill(self, job_ids):
         raise NotImplementedError()
 
-    def queue_parser(self, user=None, partition=None):
+    def queue_parser(self, user=None, partition=None, job_id=None):
         raise NotImplementedError()
 
     def parse_strange_options(self, option_dict):

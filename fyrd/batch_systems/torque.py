@@ -219,7 +219,7 @@ class TorqueServer(BatchSystemServer):
     ###########################################################################
 
 
-    def queue_parser(self, user=None, partition=None):
+    def queue_parser(self, user=None, partition=None, job_id=None):
         """Iterator for torque queues.
 
         Use the `qstat -x -t` command to get an XML queue for compatibility.
@@ -230,6 +230,8 @@ class TorqueServer(BatchSystemServer):
             User name to pass to qstat to filter queue with
         partiton : str, optional
             Partition to filter the queue with
+        job_id: str, optional
+            Job ID to filter the queue with
 
         Yields
         ------

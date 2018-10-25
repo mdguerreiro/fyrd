@@ -159,7 +159,7 @@ def kill(job_ids):
 ###############################################################################
 
 
-def queue_parser(user=None, partition=None):
+def queue_parser(user=None, partition=None, job_id=None):
     """Iterator for queue parsing.
 
     Parameters
@@ -168,6 +168,8 @@ def queue_parser(user=None, partition=None):
         User name to pass to qstat to filter queue with
     partiton : str, optional
         Partition to filter the queue with
+    job_id: str, optional
+        Job ID to filter the queue with
 
     Yields
     ------

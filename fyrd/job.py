@@ -566,16 +566,19 @@ class Job(object):
         # Set output files
         if 'outfile' in kwds:
             pth, fle = _os.path.split(kwds['outfile'])
-            kwds['outfile'] = fle
+            self.outfile = fle
         else:
-            kwds['outfile'] = '.'.join([self.name, self.suffix, 'out'])
+            self.outfile = '.'.join([self.name, self.suffix, 'out'])
         if 'errfile' in kwds:
             pth, fle = _os.path.split(kwds['errfile'])
-            kwds['errfile'] = fle
+            self.errfile = fle
         else:
-            kwds['errfile'] = '.'.join([self.name, self.suffix, 'err'])
-        self.outfile = kwds['outfile']
-        self.errfile = kwds['errfile']
+            self.errfile = '.'.join([self.name, self.suffix, 'err'])
+        # outfile is a property that adds the outpath to the outfile
+        self._mode = 'remote'
+        kwds['outfile'] = self.outfile
+        kwds['errfile'] = self.errfile
+        self._mode = 'local'
 
         # Check and set dependencies
         if 'depends' in kwds:
@@ -666,9 +669,6 @@ class Job(object):
 
         # Add all of the keyword arguments at once
         opt_string, submit_args = _options.options_to_string(kwds, self.qtype)
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        print(opt_string)
-        print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
         precmd = opt_string + '\n\n' + modstr
         self.submit_args = submit_args
 
@@ -754,6 +754,7 @@ class Job(object):
             if not self._updating:
                 self.update()
             self.queue.wait_to_submit(max_jobs)
+
 
         # Only include queued or running dependencies
         self.queue._update()  # Force update
@@ -1506,7 +1507,7 @@ class Job(object):
         if self.done or not self.submitted:
             self._updating = False
             return
-        self.queue.update()
+        self.queue.update(job_id=self.id)
         if self.submitted and self.id:
             queue_info = self.queue[self.id]
             if queue_info:
@@ -1697,7 +1698,7 @@ class Job(object):
     def __int__(self):
         """Return integer of ID."""
         if self.id:
-            if str(self.id.isdigit()):
+            if str(self.id).isdigit():
                 return int(id)
         _logme.log('No ID yet.', 'error')
         return 0
