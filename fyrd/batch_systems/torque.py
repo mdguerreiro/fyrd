@@ -110,33 +110,6 @@ class TorqueServer(BatchSystemServer):
     #                         Job Sumission Functions                         #
     ###########################################################################
 
-
-    def gen_scripts(self, job_object, command, args, precmd, modstr):
-        """Can't create the scripts in server side since Job and Script object
-        won't be serialized correctly by Pyro4.
-
-        Parameters
-        ---------
-        job_object : fyrd.job.Job
-        command : str
-            Command to execute
-        args : list
-            List of additional arguments, not used in this script.
-        precmd : str
-            String from options_to_string() to add at the top of the file, should
-            contain batch system directives
-        modstr : str
-            String to add after precmd, should contain module directives.
-
-        Returns
-        -------
-        fyrd.script_runners.Script
-            The submission script
-        None
-            Would be the exec_script, not used here.
-        """
-        raise NotImplementedError()
-
     def submit(self, file_name, dependencies=None):
         """Submit any file with dependencies to Torque.
 
@@ -249,6 +222,11 @@ class TorqueServer(BatchSystemServer):
         cntpernode is currently always 1 as most torque queues treat every core as
         a node.
         """
+        try:
+            if job_id:
+                int(job_id)
+        except ValueError:
+            job_id = None
         # I am not using run.cmd because I want to catch XML errors also
         try_count = 0
         qargs = ['qstat', '-x', '-t']
@@ -284,15 +262,19 @@ class TorqueServer(BatchSystemServer):
 
         if xmlqueue is not None:
             for xmljob in xmlqueue:
-                job_id, array_id = normalize_job_id(xmljob.find('Job_Id').text)
+                j_id, array_id = normalize_job_id(xmljob.find('Job_Id').text)
                 job_owner = xmljob.find('Job_Owner').text.split('@')[0]
                 if user and job_owner != user:
+                    continue
+                if job_id and job_id != j_id:
+                    # TODO: Check that this is really working, I don't have
+                    # a torque queue systems atm to test this.
                     continue
                 job_name  = xmljob.find('Job_Name').text
                 job_queue = xmljob.find('queue').text
                 job_state = xmljob.find('job_state').text
                 job_state = TORQUE_SLURM_STATES[job_state]
-                _logme.log('Job {} state: {}'.format(job_id, job_state),
+                _logme.log('Job {} state: {}'.format(j_id, job_state),
                            'debug')
                 ndsx = xmljob.find('exec_host')
                 if hasattr(ndsx, 'text') and ndsx.text:
@@ -328,7 +310,7 @@ class TorqueServer(BatchSystemServer):
 
                 # Torque doesn't have a variable scpu
                 scpus = 1
-                yield (job_id, array_id, job_name, job_owner, job_queue, job_state,
+                yield (j_id, array_id, job_name, job_owner, job_queue, job_state,
                        nodes, job_threads, scpus, exitcode)
 
 
