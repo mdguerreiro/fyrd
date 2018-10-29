@@ -637,7 +637,7 @@ class Job(object):
             # Get the python interpreter on the server side
             executable = '#!/usr/bin/env python{}'.format(
                 _sys.version_info.major) if _conf.get_option(
-                    'jobs', 'generic_python') else self.batch.python()
+                    'jobs', 'generic_python') else self.batch.python_path
 
             self.poutfile = _os.path.split(self.outfile)[1] + '.func.pickle'
             self.function = _Function(

@@ -1,3 +1,5 @@
+import sys as _sys
+
 from fyrd import logme as _logme
 from fyrd import conf as _conf
 
@@ -15,6 +17,14 @@ class BatchSystemError(Exception):
 
 class BatchSystemClient(object):
     NAME = None
+
+    @property
+    def python_path(self):
+        """Gets the path of the remote python interpreter.
+        """
+        server = self.get_server()
+        return server.python_path
+
     def __init__(self, remote=True, uri=None, server_class=None):
         """Creates a BatchSystemClient object.
         All functionalities (submit, kill, gen_scripts...) are redirected to
@@ -323,6 +333,14 @@ class BatchSystemClient(object):
 
 class BatchSystemServer(object):
     NAME = None
+
+    @Pyro4.expose
+    @property
+    def python_path(self):
+        """Gets the path of the remote python interpreter.
+        """
+        return _sys.executable
+
     def __init__(self):
         """Creates a BatchSystemServer object.
         Note that there're some virtual function that **MUST** be overwritten.
@@ -369,6 +387,7 @@ class BatchSystemServer(object):
             daemon.requestLoop()
         self.running = False
 
+    @Pyro4.expose
     def shutdown(self):
         if self.running:
             _logme.log('Pyro4 daemon shutdown.', 'info')
@@ -381,26 +400,34 @@ class BatchSystemServer(object):
     ###########################################################################
     #                         Pure Virtual Functions                          #
     ###########################################################################
+    @Pyro4.expose
     def queue_test(self, warn=True):
         raise NotImplementedError()
 
+    @Pyro4.expose
     def normalize_job_id(self, job_id):
         raise NotImplementedError()
 
+    @Pyro4.expose
     def normalize_state(self, state):
         raise NotImplementedError()
 
+    @Pyro4.expose
     def gen_scripts(self, job_object, command, args, precmd, modstr):
         raise NotImplementedError()
 
+    @Pyro4.expose
     def submit(self, file_name, dependencies=None, job=None, args=None, kwds=None):
         raise NotImplementedError()
 
+    @Pyro4.expose
     def kill(self, job_ids):
         raise NotImplementedError()
 
+    @Pyro4.expose
     def queue_parser(self, user=None, partition=None, job_id=None):
         raise NotImplementedError()
 
+    @Pyro4.expose
     def parse_strange_options(self, option_dict):
         raise NotImplementedError()
