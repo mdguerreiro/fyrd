@@ -666,12 +666,75 @@ def clean_dir(args):
 #  Local Queue Management  #
 ############################
 
-
 def manage_daemon(args):
     """Start, stop, or restart the local queue daemon."""
-    from fyrd.batch_systems import local
-    return local.daemon_manager(args.mode)
+    if not args.batch:
+        #TODO: read from config
+        return
 
+    batch_client, batch_server = \
+            fyrd.batch_systems.get_batch_classes(qtype=args.batch)
+
+    def get_uri():
+        uri_file = batch_server.uri_file()
+        uri = None
+        if os.path.exists(uri_file):
+            try:
+                with open(uri_file, 'r') as f:
+                    uri = f.read()
+            except FileNotFoundError:
+                fyrd.logme.log('Uri file not found', 'error')
+                uri = None
+            if not uri:
+                # TODO: Maybe read config ?
+                fyrd.logme.log('Bad uri file', 'error')
+                uri = None
+        else:
+            fyrd.logme.log('Uri file not found', 'error')
+        if not uri:
+            raise ValueError('bad uri')
+        return uri
+
+    def _start():
+        batch_server.start_server(port=args.port)
+
+    def _stop():
+            uri = get_uri()
+
+            client = batch_client(uri=uri)
+            client.shutdown()
+            if client.is_server_running():
+                fyrd.logme.log(
+                        'Shutdown didn\'t worked!', 'error'
+                        )
+            client.release()
+
+    fyrd.logme.MIN_LEVEL = 'debug'
+
+    if args.batch == 'local':
+        # TODO: Change when local is implemented
+        from fyrd.batch_systems import local
+        return local.daemon_manager(args.mode)
+    else:
+        if args.mode == 'start':
+            _start()
+        elif args.mode == 'stop':
+            _stop()
+        elif args.mode == 'status':
+            try:
+                uri = get_uri()
+                client = batch_client(uri=uri)
+                running = True if client.is_server_running() else False
+            except ValueError:
+                running = False
+
+            if running:
+                print('Server is running.')
+            else:
+                print('Server is not running.')
+        elif args.mode == 'restart':
+            _stop()
+            _start()
 
 ######################
 #  Helper Functions  #
@@ -1113,11 +1176,23 @@ def command_line_parser():
     ############################
 
     server_mode = modes.add_parser(
-        'local', aliases=['server'], help='Manage the local queue server'
+        'server', help='Manage the queue servers'
     )
     server_mode.add_argument(
         'mode', choices={'start', 'stop', 'status', 'restart'},
         metavar='{start,stop,status,restart}', help='Server command')
+
+    avail_systems = fyrd.batch_systems.DEFINED_SYSTEMS
+    avail_systems_str = '{{{}}}'.format(', '.join(avail_systems))
+    server_mode.add_argument(
+            '--batch', choices=avail_systems, metavar=avail_systems_str,
+            help=('batch system to be used, by default the one specified '
+                  'in config'), default=None
+            )
+    server_mode.add_argument(
+            '--port', metavar='port', type=int,
+            help=('Port where the server will listen'), default=None
+            )
 
     # Set function
     server_mode.set_defaults(func=manage_daemon)

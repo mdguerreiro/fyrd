@@ -25,7 +25,6 @@ from .base import BatchSystemClient, BatchSystemServer
 
 _Script = _sscrpt.Script
 
-
 SUFFIX = 'sbatch'
 
 @Pyro4.expose

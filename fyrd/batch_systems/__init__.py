@@ -39,7 +39,7 @@ ALL_STATES = GOOD_STATES + ACTIVE_STATES + BAD_STATES + UNCERTAIN_STATES
 DONE_STATES = GOOD_STATES + BAD_STATES
 
 _default_batches = {'slurm': [_slurm.SlurmClient, _slurm.SlurmServer],
-                    'torque': [_torque.TorqueServer, _torque.TorqueClient],
+                    'torque': [_torque.TorqueClient, _torque.TorqueServer],
                     'local': [None, None]}
 
 # Save the client instances
@@ -69,6 +69,19 @@ def get_batch_system(qtype=None, remote=True, uri=None):
                                                  server_class=server)
 
     return _client_batches[remote_str][qtype]
+
+def get_batch_classes(qtype=None):
+    """Return a batch_system client and server classes."""
+    qtype = qtype if qtype else get_cluster_environment()
+    if qtype not in DEFINED_SYSTEMS:
+        raise _ClusterError(
+            'qtype value {0} is not recognized, '.format(qtype) +
+            'should be one of {0}'.format(DEFINED_SYSTEMS)
+        )
+    global _default_batches
+
+    client, server = _default_batches[qtype]
+    return client, server
 
 
 #################################

@@ -1,9 +1,13 @@
 import sys as _sys
+import os as _os
+import time as _time
+import errno as _errno
 
 from fyrd import logme as _logme
 from fyrd import conf as _conf
 
 import Pyro4
+from Pyro4.errors import ConnectionClosedError
 
 
 class BatchSystemError(Exception):
@@ -148,6 +152,22 @@ class BatchSystemClient(object):
         if self.connected:
             self.server._pyroRelease()
             self.connected = False
+
+    def is_server_running(self):
+        server = self.get_server()
+        try:
+            server.ping()
+            return True
+        except ConnectionClosedError:
+            return False
+
+    def shutdown(self):
+        # Pyro4 server waits a little time before shutting down, probably to be
+        # able to respond the method call. Sleep 0.5 seconds before returning.
+        # https://github.com/irmen/Pyro4/blob/c588305fd79a2e92a487d9fefff410148c8a5db5/src/Pyro4/core.py#L1241
+        server = self.get_server()
+        server.shutdown()
+        _time.sleep(0.5)
 
     ###########################################################################
     #                           Functionality Test                            #
@@ -341,6 +361,18 @@ class BatchSystemServer(object):
         """
         return _sys.executable
 
+    @classmethod
+    def uri_file(cls):
+        uri_filename = '{}_queue.uri'.format(cls.NAME)
+        run_dir = _conf.CONFIG_PATH
+        return _os.path.join(run_dir, uri_filename)
+
+    @classmethod
+    def pid_file(cls):
+        pid_filename = '{}_queue.pid'.format(cls.NAME)
+        run_dir = _conf.CONFIG_PATH
+        return _os.path.join(run_dir, pid_filename)
+
     def __init__(self):
         """Creates a BatchSystemServer object.
         Note that there're some virtual function that **MUST** be overwritten.
@@ -376,15 +408,45 @@ class BatchSystemServer(object):
         if port:
             args['port'] = port
 
-        with Pyro4.Daemon(**args) as daemon:
-            if not objId:
-                objId = self.__class__.__name__
-            uri = daemon.register(self, objectId=objId)
+        self.pid = _os.fork()
+        if self.pid == 0:
+            with Pyro4.Daemon(**args) as daemon:
+                if not objId:
+                    objId = self.__class__.__name__
+                uri = daemon.register(self, objectId=objId)
 
-            print('Daemon running. Object uri =', uri)
+                print('Daemon running. Object uri =', uri)
+                self.running = True
+                self.daemon = daemon
+                with open(self.pid_file(), 'w') as f:
+                    f.write(str(_os.getpid()))
+                with open(self.uri_file(), 'w') as f:
+                    f.write(str(uri))
+                daemon.requestLoop()
+        else:
+            # Wait some time to make sure the process started
+            _time.sleep(1)
+            # Assume that process is running
             self.running = True
-            self.daemon = daemon
-            daemon.requestLoop()
+            if not _os.path.isfile(self.pid_file()):
+                self.running = False
+            else:
+                with open(self.pid_file(), 'r') as f:
+                    pid = int(f.read().strip())
+                    if pid <= 0:
+                        self.running = False
+                    else:
+                        try:
+                            _os.kill(pid, 0)
+                        except OSError as e:
+                            if e.errno != _errno.EPERM:
+                                self.running = False
+
+            if self.running:
+                _logme.log('Server have started correctly', 'info')
+            else:
+                _logme.log('Server have not started correctly', 'error')
+            return
         self.running = False
 
     @Pyro4.expose
@@ -394,8 +456,15 @@ class BatchSystemServer(object):
             self.daemon.shutdown()
             self.running = False
 
-    def is_running(self):
-        return len(self.daemon.sockets) > 0
+            if _os.path.exists(self.pid_file()):
+                _os.remove(self.pid_file())
+            if _os.path.exists(self.uri_file()):
+                _os.remove(self.uri_file())
+
+
+    @Pyro4.expose
+    def ping(self):
+        return 'pong'
 
     ###########################################################################
     #                         Pure Virtual Functions                          #
