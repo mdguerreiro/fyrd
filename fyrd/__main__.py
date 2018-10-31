@@ -188,6 +188,9 @@ By default it searches only your own jobs, pass '--all-users' or
 To just list jobs with some basic info, run with no arguments.
 """
 
+SERVER_NOT_RUNNING_MSG = 'Server is not running.'
+SERVER_RUNNING_MSG = 'Server is running.'
+
 DEFAULT_CONF_SECTIONS = set(fyrd.conf.DEFAULTS.keys())
 DEFAULT_CONF_OPTS = set(
     chain(*[list(i.keys()) for i in fyrd.conf.DEFAULTS.values()])
@@ -556,9 +559,11 @@ def queue(args):
     """Handle queue management."""
     # Create queue object
     if args.all_users or args.users:
-        q = fyrd.queue.Queue()
+        q = fyrd.queue.Queue(remote=args.remote, uri=args.uri)
     else:
-        q = fyrd.queue.Queue(user='self')
+        q = fyrd.queue.Queue(user='self', remote=args.remote, uri=args.uri)
+
+    q.update(job_id=args.job_id)
 
     # Get jobs
     if args.running:
@@ -680,32 +685,50 @@ def manage_daemon(args):
             fyrd.batch_systems.get_batch_classes(qtype=args.batch)
 
     def get_uri():
+        if args.uri:
+            return args.uri
         uri_file = batch_server.uri_file()
         uri = None
         if os.path.exists(uri_file):
             try:
                 with open(uri_file, 'r') as f:
                     uri = f.read()
+                if not uri:
+                    fyrd.logme.log('Bad uri file', 'warn')
             except FileNotFoundError:
-                fyrd.logme.log('Uri file not found', 'error')
-                uri = None
-            if not uri:
-                # TODO: Maybe read config ?
-                fyrd.logme.log('Bad uri file', 'error')
-                uri = None
+                fyrd.logme.log('Uri file not found', 'warn')
         else:
-            fyrd.logme.log('Uri file not found', 'error')
+            fyrd.logme.log('Uri file not found', 'warn')
         if not uri:
-            raise ValueError('bad uri')
+            try:
+                uri = fyrd.conf.get_option(args.batch, 'uri', None)
+            except ValueError:
+                # Section not in config file
+                pass
+            if not uri:
+                fyrd.logme.log('Can not find uri in config file', 'error')
+                raise ValueError('bad uri')
         return uri
 
     def _start():
         batch_server.start_server(port=args.port)
 
     def _stop():
-            uri = get_uri()
 
-            client = batch_client(uri=uri)
+            try:
+                uri = get_uri()
+                client = batch_client(uri=uri)
+            except ValueError:
+                fyrd.logme.log(
+                        'Uri not foud, assuming that the server is not '
+                        'running, but maybe it is...',
+                        'warn'
+                        )
+                print(SERVER_NOT_RUNNING_MSG)
+                return
+            except ConnectionError:
+                print(SERVER_NOT_RUNNING_MSG)
+                return
             client.shutdown()
             if client.is_server_running():
                 fyrd.logme.log(
@@ -730,12 +753,19 @@ def manage_daemon(args):
                 client = batch_client(uri=uri)
                 running = True if client.is_server_running() else False
             except ValueError:
+                fyrd.logme.log(
+                        'Uri not foud, assuming that the server is not '
+                        'running, but maybe it is...',
+                        'warn'
+                        )
+                running = False
+            except ConnectionError:
                 running = False
 
             if running:
-                print('Server is running.')
+                print(SERVER_RUNNING_MSG)
             else:
-                print('Server is not running.')
+                print(SERVER_NOT_RUNNING_MSG)
         elif args.mode == 'restart':
             _stop()
             _start()
@@ -993,9 +1023,17 @@ def command_line_parser():
     queue_filter_m.add_argument('-u', '--users', nargs='+', metavar='',
                                 help='Limit to these users')
     queue_filter_m.add_argument('-a', '--all-users', action='store_true',
-                                help='Display jobs for all users')
+                                help='Display jobs for all users',
+                                default=True)
     queue_filter.add_argument('-p', '--partitions', nargs='+', metavar='',
                               help="Limit to these partitions (queues)")
+    queue_filter.add_argument('-i', '--job-id', metavar='job_id',
+                              help="Filter by job id")
+    queue_filter.add_argument('--remote', action='store_true',
+                              help='Get jobs from remote object',
+                              default=False)
+    queue_filter.add_argument('--uri', default=None, metavar='uri',
+                              help='Get jobs from remote object')
 
     # State filtering
     queue_filter = queue_sub.add_argument_group('queue state filtering')
@@ -1197,7 +1235,11 @@ def command_line_parser():
             '--port', metavar='port', type=int,
             help=('Port where the server will listen'), default=None
             )
-
+    server_mode.add_argument(
+            '--uri', metavar='uri',
+            help=('URI to connect (to disconnect the server or get status)'),
+            default=None
+            )
     # Set function
     server_mode.set_defaults(func=manage_daemon)
 
