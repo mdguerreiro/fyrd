@@ -6,7 +6,6 @@ import os as _os
 import re as _re
 import sys as _sys
 import pwd as _pwd     # Used to get usernames for queue
-from subprocess import CalledProcessError as _CalledProcessError
 
 from six import text_type as _txt
 from six import string_types as _str
@@ -27,6 +26,7 @@ _Script = _sscrpt.Script
 
 SUFFIX = 'sbatch'
 
+
 @Pyro4.expose
 class SlurmServer(BatchSystemServer):
     NAME = 'slurm'
@@ -34,8 +34,6 @@ class SlurmServer(BatchSystemServer):
     ###########################################################################
     #                           Functionality Test                            #
     ###########################################################################
-
-
     def queue_test(self, warn=True):
         """Check that slurm can be used.
 
@@ -52,7 +50,8 @@ class SlurmServer(BatchSystemServer):
         """
         log_level = 'error' if warn else 'debug'
         sbatch = _conf.get_option('queue', 'sbatch')
-        if sbatch is not None and _os.path.dirname(sbatch) and not _run.is_exe(sbatch):
+        if (sbatch is not None and _os.path.dirname(sbatch)
+                and not _run.is_exe(sbatch)):
             _logme.log(
                 'Cannot use slurm as sbatch path set in conf to {0}'
                 .format(sbatch) + ' but that path is not an executable',
@@ -70,12 +69,9 @@ class SlurmServer(BatchSystemServer):
         squeue = _os.path.join(qpath, 'squeue')
         return _run.is_exe(squeue)
 
-
     ###########################################################################
     #                         Normalization Functions                         #
     ###########################################################################
-
-
     def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""
         if '_' in job_id:
@@ -86,11 +82,9 @@ class SlurmServer(BatchSystemServer):
             array_id = None
         return job_id, array_id
 
-
     def normalize_state(self, state):
         """Convert state into standadized (slurm style) state."""
         return state
-
 
     ###########################################################################
     #                             Job Submission                              #
@@ -120,7 +114,6 @@ class SlurmServer(BatchSystemServer):
             The execution script
         """
         raise NotImplementedError()
-
 
     def submit(self, script_file_name, dependencies=None):
         """Submit any file with dependencies to Slurm.
@@ -154,8 +147,8 @@ class SlurmServer(BatchSystemServer):
             _logme.log('sbatch failed with code {}\n'.format(code) +
                        'stdout: {}\nstderr: {}'.format(stdout, stderr),
                        'critical')
-            #raise _CalledProcessError(code, args, stdout, stderr)
-            # TODO: ?????
+            # raise _CalledProcessError(code, args, stdout, stderr)
+            # XXX: ?????
             # Pyro4 can't serialize CalledProcessError
             return {'error': True, 'stdout': stdout, 'stderr': stderr}
 
@@ -180,12 +173,9 @@ class SlurmServer(BatchSystemServer):
                      tries=5)
         return o[0] == 0
 
-
     ###########################################################################
     #                              Queue Parsing                              #
     ###########################################################################
-
-
     def queue_parser(self, user=None, partition=None, job_id=None):
         """Iterator for slurm queues.
 
@@ -249,8 +239,8 @@ class SlurmServer(BatchSystemServer):
             sacct = [tuple(i.strip(' |').split('|')) for i in
                      _run.cmd(qargs)[1].split('\n')]
             sacct = sacct[1:]
-        # This command isn't super stable and we don't care that much, so I will
-        # just let it die no matter what
+        # This command isn't super stable and we don't care that much, so I
+        # will just let it die no matter what
         except Exception as e:
             if _logme.MIN_LEVEL == 'debug':
                 raise e
@@ -259,8 +249,8 @@ class SlurmServer(BatchSystemServer):
 
         if sacct:
             if len(sacct[0]) != 9:
-                _logme.log('sacct parsing failed unexpectedly as there are not ' +
-                           '9 columns, aborting.', 'critical')
+                _logme.log('sacct parsing failed unexpectedly as there  ' +
+                           'are not 9 columns, aborting.', 'critical')
                 raise ValueError('sacct output does not have 9 columns. Has:' +
                                  '{}: {}'.format(len(sacct[0]), sacct[0]))
             jobids = [i[0] for i in squeue]
@@ -277,13 +267,14 @@ class SlurmServer(BatchSystemServer):
                      snodelist, snodes, scpus, scode] = sinfo
                     sid, sarr = self.normalize_job_id(sid)
                 except ValueError as err:
-                    _logme.log('sacct parsing failed with error {} '.format(err) +
-                               'due to an incorrect number of entries.\n' +
-                               'Contents of sinfo:\n{}\n'.format(sinfo) +
-                               'Expected 10 values\n:' +
-                               '[sid, sarr, sname, suser, spartition, sstate, ' +
-                               'snodelist, snodes, scpus, scode]',
-                               'critical')
+                    _logme.log(
+                            'sacct parsing failed with error {} '.format(err) +
+                            'due to an incorrect number of entries.\n' +
+                            'Contents of sinfo:\n{}\n'.format(sinfo) +
+                            'Expected 10 values\n:' +
+                            '[sid, sarr, sname, suser, spartition, sstate, ' +
+                            'snodelist, snodes, scpus, scode]',
+                            'critical')
                     raise
                 # Skip jobs that were already in squeue
                 if sid in jobids:
@@ -339,9 +330,13 @@ class SlurmServer(BatchSystemServer):
                             for reg in rge.strip('[]').split(','):
                                 # Node range
                                 if '-' in reg:
-                                    start, end = [int(i) for i in reg.split('-')]
+                                    start, end = [
+                                            int(i) for i in reg.split('-')
+                                            ]
                                     for i in range(start, end):
-                                        snodelist.append('{}{}'.format(node, i))
+                                        snodelist.append(
+                                                '{}{}'.format(node, i)
+                                                )
                                 else:
                                     snodelist.append('{}{}'.format(node, reg))
                 else:
@@ -350,14 +345,13 @@ class SlurmServer(BatchSystemServer):
             yield (sid, sarr, sname, suser, spartition, sstate, snodelist,
                    snodes, scpus, scode)
 
-
     def parse_strange_options(self, option_dict):
         """Parse all options that cannot be handled by the regular function.
 
         Parameters
         ----------
         option_dict : dict
-            All keyword arguments passed by the user that are not already 
+            All keyword arguments passed by the user that are not already
             defined in the Job object
 
         Returns
@@ -400,11 +394,9 @@ class SlurmClient(BatchSystemClient):
             array_id = None
         return job_id, array_id
 
-
     def normalize_state(self, state):
         """Convert state into standadized (slurm style) state."""
         return state
-
 
     def gen_scripts(self, job_object, command, args, precmd, modstr):
         """Build the submission script objects.
@@ -436,14 +428,13 @@ class SlurmClient(BatchSystemClient):
         # We use a separate script and a single srun command to avoid
         # issues with multiple threads running at once
 
-        exec_script  = '{}.{}.script'.format(
+        exec_script = '{}.{}.script'.format(
                 job_object.name,
                 job_object.suffix
                 )
 
-
         job_object._mode = 'remote'
-        exe_script   = _scrpts.CMND_RUNNER_TRACK.format(
+        exe_script = _scrpts.CMND_RUNNER_TRACK.format(
             precmd=modstr, usedir=job_object.runpath, name=job_object.name,
             command=command
         )
@@ -471,7 +462,8 @@ class SlurmClient(BatchSystemClient):
 
         return submission_script, exec_script_obj
 
-    def submit(self, script, dependencies=None, job=None, args=None, kwds=None):
+    def submit(self, script, dependencies=None,
+               job=None, args=None, kwds=None):
         """Submit any file with dependencies to Slurm.
 
         Parameters
@@ -483,19 +475,20 @@ class SlurmClient(BatchSystemClient):
         job : fyrd.job.Job, not implemented
             A job object for the calling job, not used by this functions
         args : list, not implemented
-            A list of additional command line arguments to pass when submitting,
-            not used by this function
+            A list of additional command line arguments to pass when
+            submitting, not used by this function
         kwds : dict or str, not implemented
-            A dictionary of keyword arguments to parse with options_to_string, or
-            a string of option:value,option,option:value,.... Not used by this
-            function.
+            A dictionary of keyword arguments to parse with options_to_string,
+            or a string of option:value,option,option:value,.... Not used by
+            this function.
 
         Returns
         -------
         job_id : str
         """
         script.job_object._mode = 'remote'
-        result = self.get_server() \
-                       .submit(script.file_name, dependencies=dependencies)
+        result = self.get_server().submit(
+                script.file_name, dependencies=dependencies
+                )
         script.job_object._mode = 'local'
         return result

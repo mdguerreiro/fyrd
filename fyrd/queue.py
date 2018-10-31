@@ -277,7 +277,9 @@ class Queue(object):
                         job_id = job.id
                     else:
                         job_id = str(job)
-                    job_id, array_id = self.batch_system.normalize_job_id(job_id)
+                    job_id, array_id = self.batch_system.normalize_job_id(
+                        job_id
+                    )
                     _logme.log('Checking {}'.format(job_id), 'debug')
                     lgd = False
                     # Allow 12 seconds to elapse before job is found in queue,
@@ -289,7 +291,7 @@ class Queue(object):
                         else:
                             dispo = False
                             break
-                    ## Actually look for job in running/queued queues
+                    # Actually look for job in running/queued queues
                     lgd      = False
                     lgd2     = False
                     start    = _dt.now()
@@ -314,7 +316,8 @@ class Queue(object):
                             _logme.log('{} still not complete, waiting'
                                        .format(job_id), 'verbose')
                     elif job_state in BAD_STATES:
-                        msg = 'Job {} failed with state {}'.format(job, job_state)
+                        msg = 'Job {} failed with state {}'.format(job,
+                                                                   job_state)
                         _logme.log(msg, 'error')
                         dispo = False
                         break
@@ -326,8 +329,8 @@ class Queue(object):
                             lgd2 = True
                         if (_dt.now() - start).seconds > res_time:
                             msg = (
-                                'Job {} still in state {} after {}s wait, aborting'
-                                .format(job, job_state, res_time)
+                                'Job {} still in state {} after {}s wait, '
+                                'aborting'.format(job, job_state, res_time)
                             )
                             _logme.log(msg, 'error')
                             dispo = False
@@ -480,7 +483,7 @@ class Queue(object):
                         '{} not in queue, tried 12 times over 12s'
                         .format(job_id) + '. Job likely completed, ' +
                         'assuming completion, stats will be ' +
-                        'unavailable.','warn'
+                        'unavailable.', 'warn'
                     )
                     return False
                 continue
@@ -521,8 +524,8 @@ class Queue(object):
         else:
             _logme.log('Skipping update as last update too recent', 'debug')
             _logme.log('Last update: {}'.format(_dt.fromtimestamp(
-                                                    self.last_update)
-                                                    ), 'debug')
+                self.last_update)
+            ), 'debug')
         return self
 
     def get_jobs(self, key):
@@ -564,13 +567,13 @@ class Queue(object):
     @property
     def finished(self):
         """Return a list of jobs that are neither queued nor running."""
-        return {i: j for i, j in self.jobs.items() \
+        return {i: j for i, j in self.jobs.items()
                 if j.state not in ACTIVE_STATES}
 
     @property
     def bad(self):
         """Return a list of jobs that have bad or uncertain states."""
-        return {i: j for i, j in self.jobs.items() \
+        return {i: j for i, j in self.jobs.items()
                 if j.state in BAD_STATES or j.state in UNCERTAIN_STATES}
 
     @property
@@ -874,11 +877,11 @@ class _QueueJob(object):
                   "({name},owner:{owner}," +
                   "queue:{queue},nodes:{nodes},threads:{threads}," +
                   "exitcode:{code})").format(
-                      id=self.id, name=self.name, owner=self.owner,
-                      queue=self.queue, nodes=self.nodes,
-                      code=self.exitcode, threads=self.threads,
-                      state=self.state, child=child_str, cname=self._cname
-                  )
+            id=self.id, name=self.name, owner=self.owner,
+            queue=self.queue, nodes=self.nodes,
+            code=self.exitcode, threads=self.threads,
+            state=self.state, child=child_str, cname=self._cname
+        )
         if self.disappeared:
             outstr += 'DISAPPEARED>'
         else:
@@ -986,7 +989,9 @@ class QueueError(Exception):
 #  A default Queue Object for the User  #
 #########################################
 
+
 _default_queues = None
+
 
 def default_queue(qtype=None, remote=True, uri=None, user=None):
     """Return a default batch system."""
@@ -995,6 +1000,6 @@ def default_queue(qtype=None, remote=True, uri=None, user=None):
         _default_queues = {}
     if qtype not in _default_queues:
         _default_queues[qtype] = Queue(
-                user, qtype=qtype, remote=remote, uri=uri
-                )
+            user, qtype=qtype, remote=remote, uri=uri
+        )
     return _default_queues[qtype]

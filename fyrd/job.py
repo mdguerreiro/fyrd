@@ -16,7 +16,6 @@ import dill as _pickle
 from six import reraise as _reraise
 from six import text_type as _txt
 from six import string_types as _str
-from six import integer_types as _int
 
 ###############################################################################
 #                                Our functions                                #
@@ -26,7 +25,6 @@ from . import run     as _run
 from . import conf    as _conf
 from . import queue   as _queue
 from . import logme   as _logme
-from . import script_runners as _scrpts
 from . import batch_systems  as _batch
 from . import ClusterError   as _ClusterError
 from .submission_scripts import Function as _Function
@@ -355,7 +353,7 @@ class Job(object):
             return None
         if not self.start:
             self.get_times()
-        return self.end-self.start
+        return self.end - self.start
 
     @property
     def done(self):
@@ -517,7 +515,6 @@ class Job(object):
     def poutfile(self, value):
         self._poutfile = value
 
-
     ###############################
     #  Core Job Handling Methods  #
     ###############################
@@ -533,8 +530,8 @@ class Job(object):
             self.clean_outputs = kwds.pop('clean_outputs')
 
         # Set suffix
-        self.suffix = kwds.pop('suffix') if 'suffix' in kwds \
-                      else _conf.get_option('jobs', 'suffix')
+        self.suffix = (kwds.pop('suffix') if 'suffix' in kwds
+                       else _conf.get_option('jobs', 'suffix'))
 
         # Merge in profile, this includes all args from the DEFAULT profile
         # as well, ensuring that those are always set at a minumum.
@@ -542,7 +539,7 @@ class Job(object):
         prof = _conf.get_profile(profile)
         if not prof:
             raise _ClusterError('No profile found for {}'.format(profile))
-        for k,v in prof.args.items():
+        for k, v in prof.args.items():
             if k not in kwds:
                 kwds[k] = v
 
@@ -764,7 +761,6 @@ class Job(object):
                 self.update()
             self.queue.wait_to_submit(max_jobs)
 
-
         # Only include queued or running dependencies
         self.queue._update()  # Force update
         depends = []
@@ -812,14 +808,14 @@ class Job(object):
         if results['error']:
             stdout, stderr = (results['stdout'], results['stderr'])
             err_str = ('Error executing the job in the batch system...\n'
-                        'stdout: {0}\n'
-                        'stderr: {1}').format(stdout, stderr)
+                       'stdout: {0}\n'
+                       'stderr: {1}').format(stdout, stderr)
             _logme.log(err_str,
                        'error')
             raise _batch.BatchSystemError(
-                    'Error executing the job in the batch system',
-                    stdout=stdout, stderr=stderr
-                    )
+                'Error executing the job in the batch system',
+                stdout=stdout, stderr=stderr
+            )
 
         self.id = results['result']
 
@@ -879,8 +875,9 @@ class Job(object):
         """
         if self.killed:
             _logme.log(
-                    'Job already killed. Like people, jobs can '
-                    'only be killed once.', 'warn')
+                'Job already killed. Like people, jobs can '
+                'only be killed once.', 'warn'
+            )
             return self
         if not self.submitted:
             _logme.log('Job not submitted, cannot kill', 'warn')
@@ -1607,7 +1604,7 @@ class Job(object):
         if self._found_files:
             _logme.log('Already found files, not waiting again', 'debug')
             return True
-        wait_time = 0.1 # seconds
+        wait_time = 0.1  # seconds
         if btme:
             lvl = 'debug'
         else:

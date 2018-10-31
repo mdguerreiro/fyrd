@@ -68,6 +68,7 @@ class BatchSystemClient(object):
                 self.uri = uri
             else:
                 self.uri = _conf.get_option(self.NAME, 'uri')
+                _logme.log('Getting uri from config file', 'info')
                 if not self.uri:
                     raise ValueError('Can\'t find URI in config file.')
             self.connected = self.connect()
