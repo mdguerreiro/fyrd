@@ -669,8 +669,12 @@ def clean_dir(args):
 def manage_daemon(args):
     """Start, stop, or restart the local queue daemon."""
     if not args.batch:
-        #TODO: read from config
-        return
+        fyrd.batch_systems.get_cluster_environment()
+        args.batch = fyrd.batch_systems.MODE
+        fyrd.logme.log(
+                'No batch system passed, assuming {}'.format(args.batch),
+                'info'
+                )
 
     batch_client, batch_server = \
             fyrd.batch_systems.get_batch_classes(qtype=args.batch)
