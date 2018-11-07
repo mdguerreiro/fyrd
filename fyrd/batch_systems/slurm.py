@@ -347,6 +347,7 @@ class SlurmServer(BatchSystemServer):
 
     def parse_strange_options(self, option_dict):
         """Parse all options that cannot be handled by the regular function.
+        Handled on client side.
 
         Parameters
         ----------
@@ -365,15 +366,7 @@ class SlurmServer(BatchSystemServer):
             Would contain additional arguments to pass to sbatch, but these
             are not needed so we just return None
         """
-        outlist = []
-        # Handle cores separately
-        nodes = int(option_dict.pop('nodes')) if 'nodes' in option_dict else 1
-        cores = int(option_dict.pop('cores')) if 'cores' in option_dict else 1
-
-        outlist.append('#SBATCH --ntasks {}'.format(nodes))
-        outlist.append('#SBATCH --cpus-per-task {}'.format(cores))
-
-        return outlist, option_dict, None
+        raise NotImplementedError
 
 
 class SlurmClient(BatchSystemClient):
@@ -492,3 +485,50 @@ class SlurmClient(BatchSystemClient):
                 )
         script.job_object._mode = 'local'
         return result
+
+    def parse_strange_options(self, option_dict):
+        """Parse all options that cannot be handled by the regular function.
+
+        Parameters
+        ----------
+        option_dict : dict
+            All keyword arguments passed by the user that are not already
+            defined in the Job object
+
+        Returns
+        -------
+        list
+            A list of strings to be added at the top of the script file
+        dict
+            Altered version of option_dict with all options that can't be
+            handled by `fyrd.batch_systems.options.option_to_string()` removed.
+        None
+            Would contain additional arguments to pass to sbatch, but these
+            are not needed so we just return None
+        """
+        print(option_dict)
+        outlist = []
+
+        nodes = None
+        if 'nodes' in option_dict:
+            nodes = int(option_dict.pop('nodes'))
+            outlist.append('#SBATCH --ntasks {}'.format(nodes))
+
+        # First look for cpus_per_task, if it's not there change to cores
+        if 'cpus_per_task' in option_dict:
+            cores = int(option_dict.pop('cpus_per_task'))
+            outlist.append('#SBATCH --cpus-per-task {}'.format(cores))
+            if 'cores' in option_dict:
+                # Avoid option parser to raise errors
+                option_dict.pop('cores')
+        elif 'cores' in option_dict:
+            cores = int(option_dict.pop('cores'))
+            if not nodes:
+                outlist.append('#SBATCH --ntasks 1')
+            outlist.append('#SBATCH --cpus-per-task {}'.format(cores))
+
+        if 'tasks_per_node' in option_dict:
+            cpt = int(option_dict.pop('tasks_per_node'))
+            outlist.append('#SBATCH --tasks-per-node {}'.format(cpt))
+
+        return outlist, option_dict, None

@@ -168,6 +168,14 @@ SLURM  = _OD([
      {'help': 'Start after this much time',
       'slurm': '--begin={}', 'type': str,
       'default': None}),
+    ('cpus_per_task',
+     {'help': 'Number of CPU per task',
+      'slurm': '--cpus-per-task={}', 'type': (str, int),
+      'default': None}),
+    ('tasks_per_node',
+     {'help': 'Number of tasks per node',
+      'slurm': '--tasks-per-node={}', 'type': (str, int),
+      'default': None}),
 ])
 
 ################################################################
