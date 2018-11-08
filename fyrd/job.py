@@ -234,6 +234,8 @@ class Job(object):
     clean_files   = _conf.get_option('jobs', 'clean_files')
     clean_outputs = _conf.get_option('jobs', 'clean_outputs')
 
+    NOT_SUBMITTED_STATE = 'Not_Submitted'
+
     def __init__(self, command, args=None, kwargs=None, name=None, qtype=None,
                  profile=None, queue=None, remote=True, uri=None, **kwds):
         """Initialization function arguments.
@@ -311,7 +313,7 @@ class Job(object):
         self.batch = _batch.get_batch_system(qtype, remote=remote, uri=uri)
         self.qtype = qtype
 
-        self.state = 'Not_Submitted'
+        self.state = self.NOT_SUBMITTED_STATE
 
         # Save keywords for posterity and parsing
         self.kwds = kwds
@@ -956,7 +958,7 @@ class Job(object):
         self.id            = None
         self.found         = False
         self.queue_info    = None
-        self.state         = 'Not_Submitted'
+        self.state         = self.NOT_SUBMITTED_STATE
         self._got_out      = False
         self._got_stdout   = False
         self._got_stderr   = False
