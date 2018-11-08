@@ -29,6 +29,11 @@ class BatchSystemClient(object):
         server = self.get_server()
         return server.python_path
 
+    @property
+    def qtype(self):
+        server = self.get_server()
+        return server.qtype
+
     def __init__(self, remote=True, uri=None, server_class=None):
         """Creates a BatchSystemClient object.
         All functionalities (submit, kill, gen_scripts...) are redirected to
@@ -361,6 +366,11 @@ class BatchSystemServer(object):
         """Gets the path of the remote python interpreter.
         """
         return _sys.executable
+
+    @Pyro4.expose
+    @property
+    def qtype(self):
+        return self.NAME
 
     @classmethod
     def uri_file(cls):

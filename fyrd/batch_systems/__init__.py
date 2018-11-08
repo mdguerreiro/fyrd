@@ -17,13 +17,13 @@ from importlib import import_module as _import
 
 from . import slurm as _slurm
 from . import torque as _torque
-from .base import BatchSystemError
+from .base import BatchSystemError, BatchSystemClient
 
 from .. import run as _run
 from .. import logme as _logme
 from .. import ClusterError as _ClusterError
 
-DEFINED_SYSTEMS = {'torque', 'slurm', 'local'}
+DEFINED_SYSTEMS = {'torque', 'slurm', 'local', 'auto'}
 
 MODE = None
 
@@ -56,6 +56,16 @@ def get_batch_system(qtype=None, remote=True, uri=None):
         )
     global _default_batches
     global _client_batches
+
+    if qtype == 'auto' and remote and uri:
+        tmp_cli = BatchSystemClient(remote=remote, uri=uri)
+        if not tmp_cli.connected:
+            raise BatchSystemError(
+                'BatchSystemClient not connected. Can not get batch type'
+                )
+            return None
+        qtype = tmp_cli.qtype
+        print('qtype = ', qtype)
 
     remote_str = 'remote' if remote else 'local'
     if qtype in _client_batches[remote_str].keys():
