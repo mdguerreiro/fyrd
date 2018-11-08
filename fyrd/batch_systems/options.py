@@ -127,7 +127,7 @@ CLUSTER_CORE = _OD([
     # We explictly set MB in torque
     ('mem',
      {'help': 'Memory to use in MB (e.g. 4000)',
-      'default': 4000, 'type': (int, str),
+      'default': None, 'type': (int, str),
       'slurm': '--mem={}', 'torque': '-l mem={}MB'}),
     ('partition',
      {'help': 'The partition/queue to run in (e.g. local/batch)',
