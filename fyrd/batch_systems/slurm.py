@@ -512,7 +512,12 @@ class SlurmClient(BatchSystemClient):
         nodes = None
         if 'nodes' in option_dict:
             nodes = int(option_dict.pop('nodes'))
-            outlist.append('#SBATCH --ntasks {}'.format(nodes))
+            outlist.append('#SBATCH --nodes {}'.format(nodes))
+
+        tasks = None
+        if 'tasks' in option_dict:
+            tasks = int(option_dict.pop('tasks'))
+            outlist.append('#SBATCH --ntasks {}'.format(tasks))
 
         # First look for cpus_per_task, if it's not there change to cores
         if 'cpus_per_task' in option_dict:
@@ -523,7 +528,7 @@ class SlurmClient(BatchSystemClient):
                 option_dict.pop('cores')
         elif 'cores' in option_dict:
             cores = int(option_dict.pop('cores'))
-            if not nodes:
+            if not tasks:
                 outlist.append('#SBATCH --ntasks 1')
             outlist.append('#SBATCH --cpus-per-task {}'.format(cores))
 
