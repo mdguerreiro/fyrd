@@ -56,16 +56,23 @@ def get_batch_system(qtype=None, remote=True, uri=None):
         )
     global _default_batches
     global _client_batches
+    global MODE
 
-    if qtype == 'auto' and remote and uri:
-        tmp_cli = BatchSystemClient(remote=remote, uri=uri)
-        if not tmp_cli.connected:
-            raise BatchSystemError(
-                'BatchSystemClient not connected. Can not get batch type'
+    if qtype == 'auto':
+        if remote and uri:
+            tmp_cli = BatchSystemClient(remote=remote, uri=uri)
+            if not tmp_cli.connected:
+                raise BatchSystemError(
+                    'BatchSystemClient not connected. Can not get batch type'
+                    )
+                return None
+            qtype = tmp_cli.qtype
+            MODE = qtype
+        else:
+            raise ValueError(
+                'To automatically get queue type, there must be a remote '
+                'server and the URI must be specified.'
                 )
-            return None
-        qtype = tmp_cli.qtype
-        print('qtype = ', qtype)
 
     remote_str = 'remote' if remote else 'local'
     if qtype in _client_batches[remote_str].keys():

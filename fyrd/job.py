@@ -311,7 +311,8 @@ class Job(object):
         else:
             self.queue = _queue.default_queue(qtype, remote=remote, uri=uri)
         self.batch = _batch.get_batch_system(qtype, remote=remote, uri=uri)
-        self.qtype = qtype
+        # Get qtype from remote object.
+        self.qtype = self.batch.qtype
 
         self.state = self.NOT_SUBMITTED_STATE
 
