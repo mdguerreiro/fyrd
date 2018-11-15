@@ -673,6 +673,7 @@ class Queue(object):
                 job.exitcode  = job.get_exitcode()
             else:
                 job.nodes   = job_nodelist
+                job.cpus    = job_cpus
                 job.threads = job_threads
                 job.exitcode = job_exitcode
 

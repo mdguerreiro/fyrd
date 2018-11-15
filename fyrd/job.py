@@ -329,14 +329,14 @@ class Job(object):
     #  Properties  #
     ################
     @property
-    def killed(self):
-        """If the job have been killed or not"""
-        return self.state == 'killed'
-
-    @killed.setter
-    def killed(self, value):
-        if value:
-            self.state = 'killed'
+    def metrics(self):
+        """Build a list of files associated with this class."""
+        if not self.done:
+            _logme.log('Job have not finished, can\'t get metrics yet', 'warn')
+            return None
+        res = list(self.batch.metrics(job_id=self.id))
+        # TODO: See how to deal with multiple results
+        return res[0]
 
     @property
     def files(self):
@@ -876,12 +876,6 @@ class Job(object):
         -------
         self : Job
         """
-        if self.killed:
-            _logme.log(
-                'Job already killed. Like people, jobs can '
-                'only be killed once.', 'warn'
-            )
-            return self
         if not self.submitted:
             _logme.log('Job not submitted, cannot kill', 'warn')
             return self
@@ -893,10 +887,10 @@ class Job(object):
                 'This will terminate the running job, continue?', 'n'
             ):
                 return self
-        if self.batch.kill(self.id):
-            self.killed = True
-        else:
+        if not self.batch.kill(self.id):
             _logme.log('Failed to kill the job', 'error')
+
+        self.update()
         return self
 
     def clean(self, delete_outputs=None, get_outputs=True):
@@ -948,9 +942,8 @@ class Job(object):
                "you want to do this?")
         if confirm:
             _run.get_yesno(msg, default='n')
-        # Clean old set, if the job was killed there're no outputs to clean
-        delete_outputs = not self.killed
-        self.clean(delete_outputs=delete_outputs)
+        # Clean old set
+        self.clean(delete_outputs=True)
         # Reset runtime attributes
         self.initialized   = False
         self.scripts_ready = False
@@ -1025,9 +1018,6 @@ class Job(object):
             True if exitcode == 0, False if not, 'disappeared' if job lost from
             queue.
         """
-        if self.killed:
-            _logme.log('Job have been killed, nothing to do', 'warn')
-            return
         if not self.submitted:
             if _conf.get_option('jobs', 'auto_submit'):
                 _logme.log('Auto-submitting as not submitted yet', 'debug')
@@ -1094,9 +1084,6 @@ class Job(object):
                     'delete_outfiles={}').format(
                         cleanup, self.clean_files, delete_outfiles
                     ), 'debug')
-        if self.killed:
-            _logme.log('Job have been killed, nothing to do', 'warn')
-            return
         # Wait for queue
         status = self.wait()
         if status is not True:
@@ -1529,10 +1516,6 @@ class Job(object):
         _logme.log('Updating job.', 'debug')
         self._updating = True
         if self.done or not self.submitted:
-            self._updating = False
-            return
-        if self.killed:
-            _logme.log('Job have been killed, nothing to do', 'warn')
             self._updating = False
             return
         self.queue.update(job_id=self.id)

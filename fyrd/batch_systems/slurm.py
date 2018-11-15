@@ -31,6 +31,30 @@ SUFFIX = 'sbatch'
 class SlurmServer(BatchSystemServer):
     NAME = 'slurm'
 
+    def metrics(self, job_id=None):
+        _logme.log('Getting job metrics', 'debug')
+
+        fields = (
+            'JobID', 'Partition', 'AllocCPUs', 'AllocNodes', 'AllocTres',
+            'AveCPUFreq', 'AveDiskRead', 'AveDiskWrite', 'AveRSS',
+            'ConsumedEnergy', 'Submit', 'Start', 'End', 'Elapsed'
+            )
+        qargs = [
+            'sacct', '-p', '--noheader',
+            '--format={}'.format(','.join(fields))
+            ]
+        if job_id:
+            qargs.append('-j {}'.format(job_id))
+        try:
+            sacct = [tuple(i.strip(' |').split('|')) for i in
+                     _run.cmd(qargs)[1].split('\n')]
+        except Exception as e:
+            _logme.log('Error running sacct to get the metrics', 'error')
+            sacct = []
+
+        for line in sacct:
+            yield line
+
     ###########################################################################
     #                           Functionality Test                            #
     ###########################################################################
@@ -376,6 +400,10 @@ class SlurmClient(BatchSystemClient):
 
     NAME = 'slurm'
     PREFIX = '#SBATCH'
+
+    def metrics(self, job_id=None):
+        server = self.get_server()
+        return server.metrics(job_id=job_id)
 
     def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""
