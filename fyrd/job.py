@@ -334,9 +334,7 @@ class Job(object):
         if not self.done:
             _logme.log('Job have not finished, can\'t get metrics yet', 'warn')
             return None
-        res = list(self.batch.metrics(job_id=self.id))
-        # TODO: See how to deal with multiple results
-        return res[0]
+        return list(self.batch.metrics(job_id=self.id))
 
     @property
     def files(self):

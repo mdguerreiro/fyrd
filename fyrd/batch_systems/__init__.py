@@ -30,7 +30,7 @@ MODE = None
 # Define job states all batch systems must return one of these states
 GOOD_STATES      = ['complete', 'completed', 'special_exit']
 ACTIVE_STATES    = ['configuring', 'completing', 'pending',
-                    'held', 'running']
+                    'held', 'running', 'submitted']
 BAD_STATES       = ['boot_fail', 'cancelled', 'failed', 'killed',
                     'node_fail', 'timeout', 'disappeared']
 UNCERTAIN_STATES = ['preempted', 'stopped',

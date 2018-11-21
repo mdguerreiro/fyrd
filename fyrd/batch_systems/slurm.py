@@ -40,7 +40,7 @@ class SlurmServer(BatchSystemServer):
             'ConsumedEnergy', 'Submit', 'Start', 'End', 'Elapsed'
             )
         qargs = [
-            'sacct', '-p', '--noheader',
+            'sacct', '-p', '--noheader', '--noconvert'
             '--format={}'.format(','.join(fields))
             ]
         if job_id:
