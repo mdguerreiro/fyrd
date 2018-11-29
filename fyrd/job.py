@@ -367,11 +367,13 @@ class Job(object):
         done : bool
         """
         # We have the same statement twice to try and avoid updating.
-        if self.state in _batch.DONE_STATES:
+        state = self.state.split()[0]
+        if state in _batch.DONE_STATES:
             return True
         if not self._updating:
             self.update()
-            if self.state in _batch.DONE_STATES:
+            state = self.state.split()[0]
+            if state in _batch.DONE_STATES:
                 return True
         return False
 
@@ -458,10 +460,7 @@ class Job(object):
 
     @property
     def scriptpath(self):
-        if self._mode == 'remote':
-            scriptpath = _os.path.join(self._runpath, self._scriptpath)
-        else:
-            scriptpath = _os.path.join(self.localpath, self._scriptpath)
+        scriptpath = _os.path.join(self.runpath, self._scriptpath)
         return scriptpath
 
     @scriptpath.setter

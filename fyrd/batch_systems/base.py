@@ -384,6 +384,12 @@ class BatchSystemServer(object):
         run_dir = _conf.CONFIG_PATH
         return _os.path.join(run_dir, pid_filename)
 
+    @classmethod
+    def log_file(cls):
+        log_filename = '{}_queue.log'.format(cls.NAME)
+        run_dir = _conf.CONFIG_PATH
+        return _os.path.join(run_dir, log_filename)
+
     def __init__(self):
         """Creates a BatchSystemServer object.
         Note that there're some virtual function that **MUST** be overwritten.
@@ -433,7 +439,24 @@ class BatchSystemServer(object):
                     f.write(str(_os.getpid()))
                 with open(self.uri_file(), 'w') as f:
                     f.write(str(uri))
-                daemon.requestLoop()
+
+                # MN closes stdout and stderr after ssh logout, bind them to a
+                # file to have logging and avoid IO errors.
+
+                # Close stdout and stderr
+                _os.close(1)
+                _os.close(2)
+                # File will be open to fd 1 (stdout)
+                with open(self.log_file(), 'w') as f:
+                    # Dup the fd to stderr
+                    _os.dup(1)
+                    try:
+                        daemon.requestLoop()
+                    except Exception as e:
+                        print(e)
+                    finally:
+                        _sys.stdout.flush()
+                        _sys.stderr.flush()
         else:
             # Wait some time to make sure the process started
             _time.sleep(1)
