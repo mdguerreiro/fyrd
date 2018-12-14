@@ -167,6 +167,6 @@ if __name__ == "__main__":
         pickle.dump(out, fout)
 
     if isinstance(out, tuple):
-        if issubclass(BaseException, out[0]):
+        if issubclass(out[0], BaseException):
             six.reraise(*out)
 """
