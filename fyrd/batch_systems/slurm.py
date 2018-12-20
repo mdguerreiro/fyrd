@@ -534,13 +534,14 @@ class SlurmClient(BatchSystemClient):
             Would contain additional arguments to pass to sbatch, but these
             are not needed so we just return None
         """
-        print(option_dict)
         outlist = []
 
         nodes = None
         if 'nodes' in option_dict:
-            nodes = int(option_dict.pop('nodes'))
-            outlist.append('#SBATCH --nodes {}'.format(nodes))
+            n = option_dict.pop('nodes')
+            if isinstance(n, str) and n.isdigit():
+                nodes = int(n)
+                outlist.append('#SBATCH --nodes {}'.format(nodes))
 
         tasks = None
         if 'tasks' in option_dict:
