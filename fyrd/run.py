@@ -1034,10 +1034,9 @@ def import_function(function, mode='string'):
                          .format(mode))
 
     if _inspect.ismethod(function):
-        name = (dict(_inspect.getmembers(function.__self__))['__class__']
-                .__name__)
+        name = function.__self__.__class__.__name__
     else:
-        name    = function.__name__
+        name = function.__name__
 
     # Attempt to resolve defining file
     parent = _inspect.getmodule(function)

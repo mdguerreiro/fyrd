@@ -400,6 +400,7 @@ class SlurmClient(BatchSystemClient):
 
     NAME = 'slurm'
     PREFIX = '#SBATCH'
+    PARALLEL = 'srun'
 
     def metrics(self, job_id=None):
         server = self.get_server()
@@ -446,42 +447,24 @@ class SlurmClient(BatchSystemClient):
         """
         scrpt = '{}.{}.{}'.format(job_object.name, job_object.suffix, SUFFIX)
 
-        # We use a separate script and a single srun command to avoid
-        # issues with multiple threads running at once
-
-        exec_script = '{}.{}.script'.format(
-                job_object.name,
-                job_object.suffix
-                )
-
+        # Use a single script to run the job and avoid using srun in order to
+        # allow sequential and parallel executions to live together in job.
+        # NOTE: the job is initially executed in sequential mode, and the
+        # programmer is responsible of calling their parallel codes by means
+        # of self.PARALLEL preffix.
         job_object._mode = 'remote'
-        exe_script = _scrpts.CMND_RUNNER_TRACK.format(
-            precmd=modstr, usedir=job_object.runpath, name=job_object.name,
+        sub_script = _scrpts.CMND_RUNNER_TRACK.format(
+            precmd=precmd, usedir=job_object.runpath, name=job_object.name,
             command=command
         )
         job_object._mode = 'local'
 
-        # Create the exec_script Script object
-        exec_script_obj = _Script(
-            script=exe_script, file_name=exec_script, job=job_object
+        # Create the sub_script Script object
+        sub_script_obj = _Script(
+            script=sub_script, file_name=scrpt, job=job_object
         )
 
-        job_object._mode = 'remote'
-        remote_path = _os.path.join(
-                    job_object.runpath, job_object.scriptpath, exec_script
-                )
-        job_object._mode = 'local'
-
-        ecmnd = 'srun bash {}'.format(remote_path)
-
-        sub_script = _scrpts.SCRP_RUNNER.format(
-            precmd=precmd, script=remote_path, command=ecmnd
-        )
-
-        submission_script = _Script(script=sub_script, file_name=scrpt,
-                                    job=job_object)
-
-        return submission_script, exec_script_obj
+        return sub_script_obj, None
 
     def submit(self, script, dependencies=None,
                job=None, args=None, kwds=None):

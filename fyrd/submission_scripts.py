@@ -124,21 +124,33 @@ class Function(Script):
         ##########################
         #  Take care of imports  #
         ##########################
-        filtered_imports = _run.get_all_imports(
-            function, {'imports': imports}, prot=True
-        )
+        # Note: this can be directly managed by serialization modules such as
+        # dill or cloudpickle and it is not really required to do it here. If
+        # you want to disable this option set pickle_imports = False
+        pickle_imports = True
+        if pickle_imports:
+            impts = _run.indent("None")
+            func_import = ""
+            _pickle.settings['recurse'] = True
 
-        # Get rid of duplicates and join imports
-        impts = _run.indent('\n'.join(set(filtered_imports)), '    ')
+        else:
+            filtered_imports = _run.get_all_imports(
+                function, {'imports': imports}, prot=True
+            )
 
-        # Import the function itself
-        func_import = _run.indent(_run.import_function(function), '    ')
+            # Get rid of duplicates and join imports
+            impts = _run.indent('\n'.join(set(filtered_imports)), '    ')
+            impts = _run.indent("None")
 
-        # sys paths
-        if syspaths:
-            _logme.log('Syspaths: {}'.format(syspaths), 'debug')
-            impts = (_run.indent(_run.syspath_fmt(syspaths), '    ') + '\n\n'
-                     + impts)
+            # Import the function itself
+            func_import = _run.indent(_run.import_function(function), '    ')
+            func_import = ""
+
+            # sys paths
+            if syspaths:
+                _logme.log('Syspaths: {}'.format(syspaths), 'debug')
+                impts = (_run.indent(_run.syspath_fmt(syspaths), '    ')
+                         + '\n\n' + impts)
 
         # Set file names
         self.job_object   = job

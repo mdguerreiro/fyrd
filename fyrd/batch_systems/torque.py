@@ -351,7 +351,13 @@ class TorqueServer(BatchSystemServer):
 
 
 class TorqueClient(BatchSystemClient):
+    """
+    """
+
     NAME = 'torque'
+    PREFIX = '#PBS'
+    PARALLEL = 'mpiexec'
+
     def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""
         job_id = job_id.split('.')[0]
@@ -407,7 +413,8 @@ class TorqueClient(BatchSystemClient):
         )
         job_object._mode = 'local'
 
-        return _Script(script=sub_script, file_name=scrpt), None
+        return _Script(script=sub_script, file_name=scrpt, job=job_object), \
+            None
 
     def submit(self, file_name, dependencies=None, job=None, args=None, kwds=None):
         """Submit any file with dependencies to Torque.

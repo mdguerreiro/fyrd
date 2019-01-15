@@ -321,6 +321,8 @@ class Job(object):
 
         self.name = self._update_name(name)
 
+        self.parallel_runner = self.batch.PARALLEL
+
     ##########################################################################
     #                             Public Methods                             #
     ##########################################################################
