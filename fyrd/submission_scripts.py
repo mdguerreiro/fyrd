@@ -133,6 +133,15 @@ class Function(Script):
             func_import = ""
             _pickle.settings['recurse'] = True
 
+            # Fix global function imports where pickle.load fails due to
+            # missing imports in the remote node.  This workarround modifies
+            # module name in order to avoid trying to load modules when pickle
+            # file is loaded remotely.
+            import types
+            for obj_name, obj in self.function.__globals__.items():
+                if isinstance(obj, types.FunctionType):
+                    obj.__module__ = '__main__'
+
         else:
             filtered_imports = _run.get_all_imports(
                 function, {'imports': imports}, prot=True
