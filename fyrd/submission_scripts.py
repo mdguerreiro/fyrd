@@ -5,7 +5,7 @@ Classes to build submission scripts.
 import os  as _os
 import sys as _sys
 import inspect as _inspect
-import dill as _pickle
+import cloudpickle as _pickle
 
 ###############################################################################
 #                               Import Ourself                                #
@@ -131,16 +131,19 @@ class Function(Script):
         if pickle_imports:
             impts = _run.indent("None")
             func_import = ""
-            _pickle.settings['recurse'] = True
 
-            # Fix global function imports where pickle.load fails due to
+            # Fix global function /class imports where pickle.load fails due to
             # missing imports in the remote node.  This workarround modifies
             # module name in order to avoid trying to load modules when pickle
             # file is loaded remotely.
+            # NOTE: I have not found any better way of not being intrusive with
+            # classes or functions not defined by the user. So far so good...
             import types
             for obj_name, obj in self.function.__globals__.items():
-                if isinstance(obj, types.FunctionType):
-                    obj.__module__ = '__main__'
+                if hasattr(obj, '__module__'):
+                    if not isinstance(obj, types.BuiltinMethodType) and \
+                            not isinstance(obj, types.BuiltinFunctionType):
+                        obj.__module__ = '__main__'
 
         else:
             filtered_imports = _run.get_all_imports(

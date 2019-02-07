@@ -88,7 +88,7 @@ from subprocess import Popen, PIPE
 import six
 from tblib import pickling_support
 pickling_support.install()
-import dill as pickle
+import cloudpickle as pickle
 
 out = None
 try:

@@ -12,7 +12,7 @@ from datetime import datetime as _dt
 from traceback import print_tb as _tb
 
 # Try to use dill, revert to pickle if not found
-import dill as _pickle
+import cloudpickle as _pickle
 from six import reraise as _reraise
 from six import text_type as _txt
 from six import string_types as _str
