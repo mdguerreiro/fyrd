@@ -115,6 +115,35 @@ class Function(Script):
         outfile : str, optional
             The file to hold the output.
         """
+        def user_package(package):
+            """
+                Guess if the package belongs to the python system or is a user
+                package (either installed with pip or private module).
+
+                Args:
+                    package (str):
+                        Package name
+
+                Returns:
+                    Returns False if the package belongs to the python system,
+                    True otherwise.
+
+            """
+            import imp
+
+            # Get first section of the module
+            module = package.split('.')[0]
+
+            # Check if module is in the package directory and not in built-ins
+            try:
+                file, path, desc = imp.find_module(module)
+                if desc[2] == imp.PKG_DIRECTORY:
+                    return True
+                else:
+                    return False
+            except ImportError:
+                return False
+
         _logme.log('Building Function for {}'.format(function), 'debug')
         self.function = function
         self.parent   = _inspect.getmodule(function)
@@ -132,18 +161,53 @@ class Function(Script):
             impts = _run.indent("None")
             func_import = ""
 
-            # Fix global function /class imports where pickle.load fails due to
+            # Fix global function/class imports where pickle.load fails due to
             # missing imports in the remote node.  This workarround modifies
             # module name in order to avoid trying to load modules when pickle
-            # file is loaded remotely.
+            # file is loaded remotely. This operation is only performed over
+            # object instances (functions, classes, arguments) that belong to
+            # the user package space (either installed with pip or private).
+            #
             # NOTE: I have not found any better way of not being intrusive with
             # classes or functions not defined by the user. So far so good...
-            import types
+
+            # Check for objects imported in the user function
             for obj_name, obj in self.function.__globals__.items():
                 if hasattr(obj, '__module__'):
-                    if not isinstance(obj, types.BuiltinMethodType) and \
-                            not isinstance(obj, types.BuiltinFunctionType):
+                    if user_package(obj.__module__):
+                        _logme.log(
+                            'Changing module for {}:{} to \'__main__\''
+                            .format(obj_name, obj.__module__), 'debug'
+                        )
+                        # print('Changing module for {}:{} to \'__main__\''
+                        #       .format(obj_name, obj.__module__))
                         obj.__module__ = '__main__'
+
+            # Same for args
+            if self.args:
+                for arg in self.args:
+                    if hasattr(arg, '__module__'):
+                        if user_package(arg.__module__):
+                            _logme.log(
+                                'Changing module for {}:{} to \'__main__\''
+                                .format(arg, arg.__module__), 'debug'
+                            )
+                            # print('Changing module for {}:{} to \'__main__\''
+                            #       .format(arg_name, arg.__module__))
+                            arg.__module__ = '__main__'
+
+            # Same for kwargs
+            if self.kwargs:
+                for kwarg_name, kwarg in self.kwargs.items():
+                    if hasattr(kwarg, '__module__'):
+                        if user_package(kwarg.__module__):
+                            _logme.log(
+                                'Changing module for {}:{} to \'__main__\''
+                                .format(kwarg_name, kwarg.__module__), 'debug'
+                            )
+                            # print('Changing module for {}:{} to \'__main__\''
+                            #       .format(kwarg_name, kwarg.__module__))
+                            kwarg.__module__ = '__main__'
 
         else:
             filtered_imports = _run.get_all_imports(
