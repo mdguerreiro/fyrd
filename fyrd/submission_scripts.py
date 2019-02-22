@@ -144,6 +144,57 @@ class Function(Script):
             except ImportError:
                 return False
 
+        def inspect_object_module(obj, obj_name):
+            """
+                If the object's class/method contains a __module__ attribute,
+                it changes its scope to __main__ in order to allow serializers
+                to include the object in the pickled file.
+
+                Args:
+                    obj (instance or class/method):
+                        Object instance or class or method type to change
+                        __module__ attribute.
+
+                    obj_name (str):
+                        Name of the Object (either class type or instance).
+
+            """
+            import inspect
+
+            # Obj must be class/method
+            if inspect.isclass(obj):
+                cls = obj
+                print("**** Obj ", obj_name, "is class:****", cls)
+
+            elif inspect.isfunction(obj):
+                cls = obj
+                print("**** Obj ", obj_name, "is a function:****", cls)
+
+            # Instance object, get class type
+            else:
+                cls = type(obj)
+                print("**** Obj ", obj_name, " is instance****", cls)
+
+            # Check if the class/method is an user package and change scope
+            if hasattr(cls, '__module__') and cls.__module__ != '__main__' \
+                    and user_package(cls.__module__):
+                _logme.log(
+                    'Changing module for {}:{} ({}) to \'__main__\''
+                    .format(obj_name, cls.__module__, cls), 'debug'
+                )
+                print('Changing module for {}:{} ({}) to \'__main__\''
+                      .format(obj_name, cls.__module__, cls))
+
+                try:
+                    orig_module = cls.__module__
+                    cls.__module__ = '__main__'
+                    self.pickle_modules[cls] = orig_module
+                    self.pickle_objects[cls.__name__] = orig_module
+
+                # TypeError: can't set attributes of built-in type
+                except Exception:
+                    pass
+
         _logme.log('Building Function for {}'.format(function), 'debug')
         self.function = function
         self.parent   = _inspect.getmodule(function)
@@ -171,43 +222,36 @@ class Function(Script):
             # NOTE: I have not found any better way of not being intrusive with
             # classes or functions not defined by the user. So far so good...
 
-            # Check for objects imported in the user function
+            # Keep track of the objects modified in order to restore them after
+            # serializing data in order to allow the module process to run.
+            # Dictionary with:
+            # - key: class/method/obj type
+            # - value: module where is implemented
+            self.pickle_modules = {}
+            self.pickle_objects = {}
+            import pprint
+            print("Global function:")
+            pprint.pprint(self.function.__globals__)
+
+            # Check for objects imported in the user function scope
+            # Dictionary with:
+            # - key: variable/function/type name
+            # - value: instance, method or class type
+            # Change cls.__module__ by '__main__'
             for obj_name, obj in self.function.__globals__.items():
-                if hasattr(obj, '__module__'):
-                    if user_package(obj.__module__):
-                        _logme.log(
-                            'Changing module for {}:{} to \'__main__\''
-                            .format(obj_name, obj.__module__), 'debug'
-                        )
-                        # print('Changing module for {}:{} to \'__main__\''
-                        #       .format(obj_name, obj.__module__))
-                        obj.__module__ = '__main__'
+                inspect_object_module(obj, obj_name)
 
             # Same for args
             if self.args:
                 for arg in self.args:
-                    if hasattr(arg, '__module__'):
-                        if user_package(arg.__module__):
-                            _logme.log(
-                                'Changing module for {}:{} to \'__main__\''
-                                .format(arg, arg.__module__), 'debug'
-                            )
-                            # print('Changing module for {}:{} to \'__main__\''
-                            #       .format(arg_name, arg.__module__))
-                            arg.__module__ = '__main__'
+                    inspect_object_module(arg, str(arg))
 
             # Same for kwargs
             if self.kwargs:
                 for kwarg_name, kwarg in self.kwargs.items():
-                    if hasattr(kwarg, '__module__'):
-                        if user_package(kwarg.__module__):
-                            _logme.log(
-                                'Changing module for {}:{} to \'__main__\''
-                                .format(kwarg_name, kwarg.__module__), 'debug'
-                            )
-                            # print('Changing module for {}:{} to \'__main__\''
-                            #       .format(kwarg_name, kwarg.__module__))
-                            kwarg.__module__ = '__main__'
+                    inspect_object_module(kwarg, kwarg_name)
+
+            print("List of modules changed:", self.pickle_modules)
 
         else:
             filtered_imports = _run.get_all_imports(
@@ -249,6 +293,15 @@ class Function(Script):
         with open(self.pickle_file, 'wb') as fout:
             _pickle.dump((self.function, self.args, self.kwargs), fout)
         super(Function, self).write(overwrite)
+        self.restore_modules()
+
+    def restore_modules(self):
+        # Restore module imports if they were modified
+        if hasattr(self, 'pickle_modules'):
+            print("Restoring pickled_modules", self.pickle_modules)
+            for cls, orig_module in self.pickle_modules.items():
+                cls.__module__ = orig_module
+                print("Cls, module", cls, cls.__module__)
 
     def clean(self, delete_output=False):
         """Delete the input pickle file and any scripts.

@@ -1181,6 +1181,42 @@ class Job(object):
         if _os.path.isfile(self.poutfile):
             with open(self.poutfile, 'rb') as fin:
                 out = _pickle.load(fin)
+            print(out, type(out))
+            import pprint
+            pprint.pprint(self.function.pickle_modules)
+            # Objects that are in the __main__ scope must be cloned to allow
+            # correct serialization of the instances, otherwise we can get
+            # messages such as:
+            # _pickle.PicklingError: Can't pickle <class '__main__.FileResource'>: attribute lookup FileResource on __main__ failed
+            # _pickle.PicklingError: Can't pickle <class 'module.obj'>: it's not the same object as module.obj
+            # picklingerror: can't pickle it's not the same object as casting
+            # So far so good...
+            # TODO: for single out, lists, tupes...
+            #if not isinstance(out, dict):
+            #    raise NotImplemented('Out check for not dict not implmented')
+
+            for obj_name, obj in out.items():
+                if hasattr(obj, '__module__') and obj.__module__ == '__main__':
+                    import inspect
+                    import importlib
+                    module = importlib.import_module(self.function.pickle_objects[type(obj).__name__])
+                    _logme.log('Cloning obj {}:{} ({}) from module '
+                               '{}'.format(obj_name, obj, type(obj), module),
+                               'debug')
+                    cls = getattr(module, type(obj).__name__)
+                    sig = inspect.signature(cls)
+                    params = []
+                    # For each param in the constructor add a None
+                    for name, param in sig.parameters.items():
+                        print(name, param.default)
+                        params.append(None)
+
+                    clone = cls(*params)
+                    print(clone, clone.__dict__)
+                    clone.__dict__.update(obj.__dict__)
+                    print(clone, clone.__dict__)
+                    out[obj_name] = clone
+
             if delete_file is True or self.clean_files is True:
                 _logme.log('Deleting {}'.format(self.poutfile),
                            'debug')
