@@ -164,16 +164,13 @@ class Function(Script):
             # Obj must be class/method
             if inspect.isclass(obj):
                 cls = obj
-                print("**** Obj ", obj_name, "is class:****", cls)
 
             elif inspect.isfunction(obj):
                 cls = obj
-                print("**** Obj ", obj_name, "is a function:****", cls)
 
             # Instance object, get class type
             else:
                 cls = type(obj)
-                print("**** Obj ", obj_name, " is instance****", cls)
 
             # Check if the class/method is an user package and change scope
             if hasattr(cls, '__module__') and cls.__module__ != '__main__' \
@@ -182,8 +179,6 @@ class Function(Script):
                     'Changing module for {}:{} ({}) to \'__main__\''
                     .format(obj_name, cls.__module__, cls), 'debug'
                 )
-                print('Changing module for {}:{} ({}) to \'__main__\''
-                      .format(obj_name, cls.__module__, cls))
 
                 try:
                     orig_module = cls.__module__
@@ -229,9 +224,6 @@ class Function(Script):
             # - value: module where is implemented
             self.pickle_modules = {}
             self.pickle_objects = {}
-            import pprint
-            print("Global function:")
-            pprint.pprint(self.function.__globals__)
 
             # Check for objects imported in the user function scope
             # Dictionary with:
@@ -251,7 +243,8 @@ class Function(Script):
                 for kwarg_name, kwarg in self.kwargs.items():
                     inspect_object_module(kwarg, kwarg_name)
 
-            print("List of modules changed:", self.pickle_modules)
+            _logme.log("List of modules changed: "
+                       "{}".format(self.pickle_modules), 'debug')
 
         else:
             filtered_imports = _run.get_all_imports(
@@ -298,10 +291,10 @@ class Function(Script):
     def restore_modules(self):
         # Restore module imports if they were modified
         if hasattr(self, 'pickle_modules'):
-            print("Restoring pickled_modules", self.pickle_modules)
+            _logme.log("Restoring pickled_modules "
+                       "{}".format(self.pickle_modules), 'debug')
             for cls, orig_module in self.pickle_modules.items():
                 cls.__module__ = orig_module
-                print("Cls, module", cls, cls.__module__)
 
     def clean(self, delete_output=False):
         """Delete the input pickle file and any scripts.
