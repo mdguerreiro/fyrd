@@ -1211,8 +1211,17 @@ class Job(object):
                     params.append(None)
 
                 # Create cloned object and update it with __dict__
-                clone = cls(*params)
-                clone.__dict__.update(obj.__dict__)
+                try:
+                    clone = cls(*params)
+                    clone.__dict__.update(obj.__dict__)
+
+                except Exception:
+                    error_msg = 'Failed to clone object {} ' \
+                        '({})'.format(obj, type(obj))
+                    _logme.log(error_msg, 'error')
+                    raise Exception(error_msg)
+
+                # Return cloned object
                 return clone
 
             # Return evaluated object
