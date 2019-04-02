@@ -331,7 +331,7 @@ class Job(object):
     ################
     @property
     def metrics(self):
-        """Build a list of files associated with this class."""
+        """Get the Job metrics from the Batch system."""
         if not self.done:
             _logme.log('Job have not finished, can\'t get metrics yet', 'warn')
             return None

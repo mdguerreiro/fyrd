@@ -99,6 +99,8 @@ class Function(Script):
             A root name to the outfiles
         function : callable
             Function handle.
+        job: Job instance
+            Job instance of the function/script call
         args : tuple, optional
             Arguments to the function as a tuple.
         kwargs : dict, optional
@@ -161,34 +163,39 @@ class Function(Script):
             """
             import inspect
 
-            # Obj must be class/method
+            # Obj is a class type
             if inspect.isclass(obj):
-                cls = obj
+                base_cls = obj.mro()
 
+            # Obj is a method/function object
             elif inspect.isfunction(obj):
-                cls = obj
+                base_cls = [obj]
 
             # Instance object, get class type
             else:
-                cls = type(obj)
+                base_cls = type(obj).mro()
 
-            # Check if the class/method is an user package and change scope
-            if hasattr(cls, '__module__') and cls.__module__ != '__main__' \
-                    and user_package(cls.__module__):
-                _logme.log(
-                    'Changing module for {}:{} ({}) to \'__main__\''
-                    .format(obj_name, cls.__module__, cls), 'debug'
-                )
+            # For each base class or function method
+            for cls in base_cls:
+                # Check if the class/method is an user package and is not
+                # installed on the remote Pyro4 server, then change scope
+                if hasattr(cls, '__module__') and cls.__module__ != '__main__'\
+                        and user_package(cls.__module__) \
+                        and not job.batch.is_module_installed(cls.__module__):
+                    _logme.log(
+                        'Changing module for {}:{} ({}) to \'__main__\''
+                        .format(obj_name, cls.__module__, cls), 'debug'
+                    )
 
-                try:
-                    orig_module = cls.__module__
-                    cls.__module__ = '__main__'
-                    self.pickle_modules[cls] = orig_module
-                    self.pickle_objects[cls.__name__] = orig_module
+                    try:
+                        orig_module = cls.__module__
+                        cls.__module__ = '__main__'
+                        self.pickle_modules[cls] = orig_module
+                        self.pickle_objects[cls.__name__] = orig_module
 
-                # TypeError: can't set attributes of built-in type
-                except Exception:
-                    pass
+                    # TypeError: can't set attributes of built-in type
+                    except Exception:
+                        pass
 
         _logme.log('Building Function for {}'.format(function), 'debug')
         self.function = function

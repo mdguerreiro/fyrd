@@ -2,6 +2,7 @@ import sys as _sys
 import os as _os
 import time as _time
 import errno as _errno
+import pkgutil as _pkgutil
 
 from fyrd import logme as _logme
 from fyrd import conf as _conf
@@ -38,7 +39,7 @@ class BatchSystemClient(object):
         """Creates a BatchSystemClient object.
         All functionalities (submit, kill, gen_scripts...) are redirected to
         the server to do it as generic as possible. If some batch system needs
-        to execute some of the moethods locally they can be overloaded.
+        to execute some of the methods locally they can be overloaded.
 
         To get the proper configuration values the ``NAME`` attribute must
         be set in the subclasses to the batch system name (``slurm``,
@@ -53,7 +54,7 @@ class BatchSystemClient(object):
                 If the batch system runs on a remote node, a Pyro4 object URI
                 can be specified.
             server_class: class, optional
-                If the barch system runs locally, a server class must be
+                If the batch system runs locally, a server class must be
                 provided, where it'll be the methods to execute. It should be
                 a subclass of BatchSystemServer. Example:
 
@@ -81,7 +82,7 @@ class BatchSystemClient(object):
             self.server = server_class()
         else:
             raise ValueError('No class provided for local execution. Missing '
-                              'server_class parameter.')
+                             'server_class parameter.')
 
     def get_uri(self):
         """Get the URI of the remote object
@@ -128,7 +129,7 @@ class BatchSystemClient(object):
                 raise ValueError('Cannot get server uri')
             return False
 
-        server =  Pyro4.Proxy(uri)
+        server = Pyro4.Proxy(uri)
 
         for i in range(self.max_con_retries):
             try:
@@ -140,7 +141,6 @@ class BatchSystemClient(object):
                            "retrying ({}/{}).".format(i + 1,
                                                       self.max_con_retries),
                            'error')
-
 
         if i == (self.max_con_retries - 1):
             _logme.log(
@@ -167,6 +167,22 @@ class BatchSystemClient(object):
         except ConnectionClosedError:
             return False
 
+    def is_module_installed(self, module):
+        """Asks if the module is installed on the Pyro4 server.
+
+        Parameters
+        ----------
+            module: str
+                Module name to ask for on the Pyro4 server.
+
+        Returns
+        -------
+            success: bool
+                True if the server has the module installed.
+        """
+        server = self.get_server()
+        return server.is_module_installed(module)
+
     def shutdown(self):
         # Pyro4 server waits a little time before shutting down, probably to be
         # able to respond the method call. Sleep 0.5 seconds before returning.
@@ -178,7 +194,6 @@ class BatchSystemClient(object):
     ###########################################################################
     #                           Functionality Test                            #
     ###########################################################################
-
 
     def queue_test(self, warn=True):
         """Check that this batch system can be used.
@@ -199,23 +214,19 @@ class BatchSystemClient(object):
     #                         Normalization Functions                         #
     ###########################################################################
 
-
     def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""
         server = self.get_server()
         return server.normalize_job_id(job_id)
-
 
     def normalize_state(self, state):
         """Convert state into standadized (slurm style) state."""
         server = self.get_server()
         return server.normalize_state(state)
 
-
     ###########################################################################
     #                             Job Submission                              #
     ###########################################################################
-
 
     def gen_scripts(self, job_object, command, args, precmd, modstr):
         """Build the submission script objects.
@@ -250,7 +261,8 @@ class BatchSystemClient(object):
         server = self.get_server()
         return server.gen_scripts(job_object, command, args, precmd, modstr)
 
-    def submit(file_name, dependencies=None, job=None, args=None, kwds=None):
+    def submit(self, file_name, dependencies=None, job=None, args=None,
+               kwds=None):
         """Submit any file with dependencies.
 
         If your batch system does not handle dependencies, then raise a
@@ -404,6 +416,17 @@ class BatchSystemServer(object):
         self.running = False
         self.daemon = None
 
+    def _system_modules(self):
+        """Returns a list with all packages, subpackages and modules available.
+        """
+        modules = []
+        # Iterate over packages obtaining importer, modname and ispkg
+        for _, modname, _ in _pkgutil.walk_packages(path=None,
+                                                    onerror=lambda x: None):
+            modules.append(modname)
+
+        return modules
+
     @classmethod
     def start_server(cls, host=None, port=None, objId=None):
         """Class method that created the server daemon.
@@ -484,6 +507,38 @@ class BatchSystemServer(object):
         self.running = False
 
     @Pyro4.expose
+    def is_module_installed(self, module):
+        """Checks if the module is installed on the Pyro4 server.
+
+        Parameters
+        ----------
+            module: str
+                Module name to ask for on the Pyro4 server.
+
+        Returns
+        -------
+            success: bool
+                True if the server has the module installed.
+        """
+        import importlib
+        try:
+            is_installed = importlib.util.find_spec(module)
+            _logme.log(
+                'Module {} is installed?: {}'.format(module, is_installed),
+                'debug')
+
+        # Python3.7 compatibility
+        except ModuleNotFoundError:
+            _logme.log('Module {} is NOT installed'.format(module), 'debug')
+            return False
+
+        # <Python3.6 compatibility
+        if is_installed is None:
+            return False
+        else:
+            return True
+
+    @Pyro4.expose
     def shutdown(self):
         if self.running:
             _logme.log('Pyro4 daemon shutdown.', 'info')
@@ -494,7 +549,6 @@ class BatchSystemServer(object):
                 _os.remove(self.pid_file())
             if _os.path.exists(self.uri_file()):
                 _os.remove(self.uri_file())
-
 
     @Pyro4.expose
     def ping(self):
@@ -520,7 +574,8 @@ class BatchSystemServer(object):
         raise NotImplementedError()
 
     @Pyro4.expose
-    def submit(self, file_name, dependencies=None, job=None, args=None, kwds=None):
+    def submit(self, file_name, dependencies=None, job=None, args=None,
+               kwds=None):
         raise NotImplementedError()
 
     @Pyro4.expose
