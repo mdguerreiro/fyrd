@@ -58,7 +58,10 @@ _opt = _batch.options
 """
 Where configuration files will be kept
 """
-CONFIG_PATH  = _os.path.join(_os.environ['HOME'], '.fyrd')
+try:
+    CONFIG_PATH = _os.environ['FYRD_CONFIG_PATH']
+except KeyError:
+    CONFIG_PATH  = _os.path.join(_os.environ['HOME'], '.fyrd')
 
 """
 Where the main config will be kept.
