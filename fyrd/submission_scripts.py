@@ -154,36 +154,69 @@ class Function(Script):
 
                 Args:
                     obj (instance or class/method):
-                        Object instance or class or method type to change
-                        __module__ attribute.
+                        Object instance, class, bound method or function type
+                        to change __module__ attribute.
 
                     obj_name (str):
                         Name of the Object (either class type or instance).
+
+                Note:
+                    The inspect process is carried out also recursively in
+                    order to seek for references to local installed modules on
+                    any used object in the routine to serialize.
 
             """
             import inspect
 
             # Obj is a class type
             if inspect.isclass(obj):
-                base_cls = obj.mro()
+                # Include the whole MRO list (base classes)
+                cls = obj
+                base_cls = cls.mro()
+                type_msg = 'class'
 
-            # Obj is a method/function object
+            # Obj is a function object (class function or local method)
             elif inspect.isfunction(obj):
-                base_cls = [obj]
+                # Include the function as the only one
+                cls = obj
+                base_cls = [cls]
+                type_msg = 'function'
+
+            # Obj is a bound method (class instance method)
+            elif inspect.ismethod(obj):
+                # Include the whole MRO list (base classes)
+                cls = type(obj.__self__)
+                base_cls = cls.mro()
+                type_msg = 'bound method'
 
             # Instance object, get class type
             else:
-                base_cls = type(obj).mro()
+                # Include the whole MRO list of the class (base classes)
+                cls = type(obj)
+                base_cls = cls.mro()
+                type_msg = 'instance object'
+
+            # If class type or method/function belongs to the python system or
+            # is already installed on the remote Pyro4 server just exit.
+            if not user_package(cls.__module__) or \
+                    job.batch.is_module_installed(cls.__module__):
+                return
+
+            _logme.log(
+                '{} is {} {}:{} ({})'.format(obj_name, type_msg, cls,
+                                             cls.__module__, base_cls), 'debug'
+            )
 
             # For each base class or function method
             for cls in base_cls:
                 # Check if the class/method is an user package and is not
                 # installed on the remote Pyro4 server, then change scope
+                self.pickle_visited.append(cls)
                 if hasattr(cls, '__module__') and cls.__module__ != '__main__'\
                         and user_package(cls.__module__) \
                         and not job.batch.is_module_installed(cls.__module__):
                     _logme.log(
-                        'Changing module for {}:{} ({}) to \'__main__\''
+                        '*** Changing module for {}:{} ({}) to \'__main__\''
                         .format(obj_name, cls.__module__, cls), 'debug'
                     )
 
@@ -196,6 +229,17 @@ class Function(Script):
                     # TypeError: can't set attributes of built-in type
                     except Exception:
                         pass
+
+                # Get __init__ scope for classes
+                if inspect.isclass(cls):
+                    cls = cls.__init__
+
+                # Check for objects imported inside classes/methods recursively
+                if hasattr(cls, '__globals__'):
+                    for _obj_name, _obj in cls.__globals__.items():
+                        # Avoid inifinite recursivity by checking if visited
+                        if _obj not in self.pickle_visited:
+                            inspect_object_module(_obj, _obj_name)
 
         _logme.log('Building Function for {}'.format(function), 'debug')
         self.function = function
@@ -231,6 +275,7 @@ class Function(Script):
             # - value: module where is implemented
             self.pickle_modules = {}
             self.pickle_objects = {}
+            self.pickle_visited = []
 
             # Check for objects imported in the user function scope
             # Dictionary with:
