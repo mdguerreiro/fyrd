@@ -6,6 +6,8 @@ import pkgutil as _pkgutil
 
 from fyrd import logme as _logme
 from fyrd import conf as _conf
+from fyrd import FYRD_SUCCESS, \
+    FYRD_NOT_RUNNING_ERROR, FYRD_STILL_RUNNING_ERROR
 
 import Pyro4
 from Pyro4.errors import ConnectionClosedError
@@ -427,20 +429,43 @@ class BatchSystemServer(object):
 
         return modules
 
+    def _server_running(self):
+        """Return True if server currently running.
+        """
+        # Check pid file
+        if not _os.path.isfile(self.pid_file()):
+            return False
+
+        # Get pid from file
+        with open(self.pid_file(), 'r') as f:
+            pid = int(f.read().strip())
+            if pid <= 0:
+                return False
+
+        # Check can signal with pid
+        try:
+            _os.kill(pid, 0)
+        except OSError:
+            # Any kind of error: ESRCH, EPERM, EINVAL
+            return False
+        else:
+            return True
+
     @classmethod
     def start_server(cls, host=None, port=None, objId=None):
         """Class method that created the server daemon.
         """
         obj = cls()
-        obj.daemonize(host=host, port=port, objId=objId)
-        return obj
+        return obj.daemonize(host=host, port=port, objId=objId)
 
     def daemonize(self, host=None, port=None, objId=None):
         """Creates the server daemon.
         """
-        if self.running:
-            # TODO: Find or create a better exception
-            raise Exception('Daemon already running')
+        if self._server_running():
+            self.running = True
+            _logme.log('Daemon is already running on port {}'.format(port),
+                       'error')
+            return FYRD_STILL_RUNNING_ERROR
 
         args = {}
         if host:
@@ -448,16 +473,21 @@ class BatchSystemServer(object):
         if port:
             args['port'] = port
 
+        # Fork Server process
         self.pid = _os.fork()
         if self.pid == 0:
+            # Server forked process
             with Pyro4.Daemon(**args) as daemon:
+
                 if not objId:
                     objId = self.__class__.__name__
                 uri = daemon.register(self, objectId=objId)
 
-                print('Daemon running. Object uri =', uri)
+                _logme.log('Daemon is running on uri = {}'.format(uri), 'info')
                 self.running = True
                 self.daemon = daemon
+
+                # Write PID and URI to conf files
                 with open(self.pid_file(), 'w') as f:
                     f.write(str(_os.getpid()))
                 with open(self.uri_file(), 'w') as f:
@@ -469,10 +499,15 @@ class BatchSystemServer(object):
                 # Close stdout and stderr
                 _os.close(1)
                 _os.close(2)
+
                 # File will be open to fd 1 (stdout)
-                with open(self.log_file(), 'w') as f:
-                    # Dup the fd to stderr
+                with open(self.log_file(), 'w'):
+
+                    # Dup fd 1 to be used as stderr
                     _os.dup(1)
+
+                    # Pyro4 server loop to service incoming requests,
+                    # until someone breaks this or calls shutdown().
                     try:
                         daemon.requestLoop()
                     except Exception as e:
@@ -480,31 +515,16 @@ class BatchSystemServer(object):
                     finally:
                         _sys.stdout.flush()
                         _sys.stderr.flush()
+
         else:
             # Wait some time to make sure the process started
             _time.sleep(1)
-            # Assume that process is running
-            self.running = True
-            if not _os.path.isfile(self.pid_file()):
-                self.running = False
+            if self._server_running():
+                _logme.log('Server has started correctly', 'info')
+                return FYRD_SUCCESS
             else:
-                with open(self.pid_file(), 'r') as f:
-                    pid = int(f.read().strip())
-                    if pid <= 0:
-                        self.running = False
-                    else:
-                        try:
-                            _os.kill(pid, 0)
-                        except OSError as e:
-                            if e.errno != _errno.EPERM:
-                                self.running = False
-
-            if self.running:
-                _logme.log('Server have started correctly', 'info')
-            else:
-                _logme.log('Server have not started correctly', 'error')
-            return
-        self.running = False
+                _logme.log('Server has not started correctly', 'error')
+                return FYRD_NOT_RUNNING_ERROR
 
     @Pyro4.expose
     def is_module_installed(self, module):

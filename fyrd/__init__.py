@@ -133,9 +133,6 @@ Help
 
 Full help is available at: https://fyrd.rtfd.io
 """
-import os as _os
-import signal as _signal
-import atexit as _atexit
 
 #############
 #  Version  #
@@ -144,6 +141,7 @@ import atexit as _atexit
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
+
 
 ###################
 #  House Keeping  #
@@ -154,6 +152,17 @@ class ClusterError(Exception):
     """A custom exception for cluster errors."""
 
     pass
+
+
+########################################
+# Exit codes returned by fyrd commands #
+########################################
+
+FYRD_SUCCESS = 0
+FYRD_NOT_RUNNING_ERROR = 1
+FYRD_STILL_RUNNING_ERROR = 2
+FYRD_URI_NOT_FOUND_ERROR = 3
+FYRD_CONNECTION_ERROR = 4
 
 
 #########################################
@@ -193,4 +202,7 @@ option_help = batch_systems.options.option_help
 
 __all__ = ['Job', 'Queue', 'wait', 'get', 'submit', 'submit_file', 'jobify',
            'make_job_file', 'clean', 'clean_dir', 'check_queue', 'option_help',
-           'set_profile', 'get_profile', 'get_profiles', 'conf', 'helpers']
+           'set_profile', 'get_profile', 'get_profiles', 'conf', 'helpers',
+           'FYRD_SUCCESS', 'FYRD_NOT_RUNNING_ERROR',
+           'FYRD_STILL_RUNNING_ERROR', 'FYRD_URI_NOT_FOUND_ERROR',
+           'FYRD_CONNECTION_ERROR']

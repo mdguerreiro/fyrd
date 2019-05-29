@@ -6,7 +6,6 @@ Manage fyrd config, profiles, and queue.
 
 from __future__ import print_function
 import os
-import re
 import sys
 import argparse
 import signal
@@ -255,6 +254,7 @@ Caution:
 
 """
 
+
 ###############################################################################
 #                         Catch Keyboard Interruption                         #
 ###############################################################################
@@ -263,6 +263,7 @@ def catch_keyboard(sig, frame):
     """Catch Keyboard Interruption."""
     sys.stderr.write('\nKeyboard Interrupt Detected, Exiting\n')
     sys.exit(1)
+
 
 signal.signal(signal.SIGINT, catch_keyboard)
 
@@ -292,7 +293,7 @@ def show_config(args):
     else:
         print('Current config, the parsed output of the config file:\n')
         sections = args.sections if args.sections \
-                                else fyrd.conf.DEFAULTS.keys()
+            else fyrd.conf.DEFAULTS.keys()
         sections = sorted(sections, key=_sort_conf)
         for section in sections:
             print('[{}]'.format(section))
@@ -307,7 +308,7 @@ def display_conf_help(args):
     """Print helpful information about the config options."""
     print(fyrd.conf.CONF_HELP['summary'])
     sections = args.sections if args.sections \
-                            else fyrd.conf.DEFAULTS.keys()
+        else fyrd.conf.DEFAULTS.keys()
     sections = sorted(sections, key=_sort_conf)
     for section in sections:
         print(fyrd.conf.CONF_HELP[section])
@@ -441,7 +442,6 @@ def run_args_to_keywords(args):
 
 def run(args):
     """Run an arbitrary shell script as a job."""
-    #  r = re.compile(r'{(.*?)}')
     jobs = []
     kwargs = run_args_to_keywords(args)
     extra_vars = args.extra_vars.split(',') if args.extra_vars else []
@@ -511,7 +511,7 @@ def run(args):
             arg = args.email if args.email else True
             fyrd.wait(jobs, notify=arg)
         elif args.no_notify:
-            q.wait(args.jobs, notify=False)
+            fyrd.wait(args.jobs, notify=False)
         else:
             fyrd.wait(jobs)
 
@@ -533,7 +533,7 @@ def sub_files(args):
             arg = args.email if args.email else True
             fyrd.wait(job_nos, notify=arg)
         elif args.no_notify:
-            q.wait(args.jobs, notify=False)
+            fyrd.wait(args.jobs, notify=False)
         else:
             fyrd.wait(job_nos)
 
@@ -607,7 +607,7 @@ def queue(args):
                         nodes[node] += 1
                     else:
                         nodes[node] = 1
-                cols.append(','.join(['{0}({1})'.format(n,c)
+                cols.append(','.join(['{0}({1})'.format(n, c)
                                       for n, c in nodes.items()]))
             out_table.append(cols)
         headers = ['ID', 'Name', 'State']
@@ -642,7 +642,7 @@ def clean_dir(args):
         directory = args.dir
     else:
         scriptpath = fyrd.conf.get_option('jobs', 'scriptpath')
-        outpath    = fyrd.conf.get_option('jobs', 'outpath')
+        outpath = fyrd.conf.get_option('jobs', 'outpath')
         if scriptpath:
             run_tmp_clean = True
         if outpath and args.outputs:
@@ -667,6 +667,7 @@ def clean_dir(args):
         sys.stdout.write('\n\t'.join(files))
         sys.stdout.write('\n')
 
+
 ############################
 #  Local Queue Management  #
 ############################
@@ -682,9 +683,19 @@ def manage_daemon(args):
                 )
 
     batch_client, batch_server = \
-            fyrd.batch_systems.get_batch_classes(qtype=args.batch)
+        fyrd.batch_systems.get_batch_classes(qtype=args.batch)
 
     def get_uri():
+        """Get the URI from the config or file.
+
+        Tests if URI is active before returning.
+
+        Returns
+        -------
+        uri : str or None
+            If file does not exist or URI is inactive, returns None and deletes
+            URI_FILE, else returns the URI as a string.
+        """
         if args.uri:
             return args.uri
         uri_file = batch_server.uri_file()
@@ -711,30 +722,32 @@ def manage_daemon(args):
         return uri
 
     def _start():
-        batch_server.start_server(port=args.port)
+        """Start the daemon process as a fork."""
+        return batch_server.start_server(port=args.port)
 
     def _stop():
+        """Stop the daemon process."""
+        try:
+            uri = get_uri()
+            client = batch_client(uri=uri)
+        except ValueError:
+            fyrd.logme.log('Uri not found, assuming server is down.', 'warn')
+            fyrd.logme.log(SERVER_NOT_RUNNING_MSG, 'error')
+            return fyrd.FYRD_URI_NOT_FOUND_ERROR
+        except ConnectionError:
+            fyrd.logme.log(
+                'Could not connect with fyrd server, assuming server is down.',
+                'warn'
+            )
+            fyrd.logme.log(SERVER_NOT_RUNNING_MSG, 'error')
+            return fyrd.FYRD_CONNECTION_ERROR
 
-            try:
-                uri = get_uri()
-                client = batch_client(uri=uri)
-            except ValueError:
-                fyrd.logme.log(
-                        'Uri not foud, assuming that the server is not '
-                        'running, but maybe it is...',
-                        'warn'
-                        )
-                print(SERVER_NOT_RUNNING_MSG)
-                return
-            except ConnectionError:
-                print(SERVER_NOT_RUNNING_MSG)
-                return
-            client.shutdown()
-            if client.is_server_running():
-                fyrd.logme.log(
-                        'Shutdown didn\'t worked!', 'error'
-                        )
-            client.release()
+        client.shutdown()
+        if client.is_server_running():
+            fyrd.logme.log('Shutdown didn\'t worked!', 'error')
+            return fyrd.FYRD_STILL_RUNNING_ERROR
+        client.release()
+        return fyrd.FYRD_SUCCESS
 
     fyrd.logme.MIN_LEVEL = 'debug'
 
@@ -744,9 +757,14 @@ def manage_daemon(args):
         return local.daemon_manager(args.mode)
     else:
         if args.mode == 'start':
-            _start()
+            return _start()
         elif args.mode == 'stop':
-            _stop()
+            return _stop()
+        elif args.mode == 'restart':
+            ret = _stop()
+            if ret != fyrd.FYRD_SUCCESS:
+                return ret
+            return _start()
         elif args.mode == 'status':
             try:
                 uri = get_uri()
@@ -754,26 +772,23 @@ def manage_daemon(args):
                 running = True if client.is_server_running() else False
             except ValueError:
                 fyrd.logme.log(
-                        'Uri not foud, assuming that the server is not '
-                        'running, but maybe it is...',
-                        'warn'
-                        )
+                    'Uri not found, assuming server is not running', 'warn'
+                )
                 running = False
             except ConnectionError:
                 running = False
 
             if running:
-                print(SERVER_RUNNING_MSG)
+                fyrd.logme.log(SERVER_RUNNING_MSG, 'info')
             else:
-                print(SERVER_NOT_RUNNING_MSG)
-        elif args.mode == 'restart':
-            _stop()
-            _start()
+                fyrd.logme.log(SERVER_NOT_RUNNING_MSG, 'info')
+            return fyrd.FYRD_SUCCESS \
+                if running else fyrd.FYRD_NOT_RUNNING_ERROR
+
 
 ######################
 #  Helper Functions  #
 ######################
-
 
 def add_edit_profile(args, overwrite):
     """Add or edit a profile.
@@ -880,6 +895,7 @@ class AliasedSubParsersAction(argparse._SubParsersAction):
             self._choices_actions.append(pseudo_action)
 
         return parser
+
 
 def command_line_parser():
     """Parse command line options.
