@@ -747,6 +747,7 @@ def manage_daemon(args):
             fyrd.logme.log('Shutdown didn\'t worked!', 'error')
             return fyrd.FYRD_STILL_RUNNING_ERROR
         client.release()
+        fyrd.logme.log('Server has been stopped', 'info', logfile=sys.stdout)
         return fyrd.FYRD_SUCCESS
 
     fyrd.logme.MIN_LEVEL = 'debug'
@@ -778,10 +779,12 @@ def manage_daemon(args):
             except ConnectionError:
                 running = False
 
+            # Log output to stdout, by default is stderr.
             if running:
-                fyrd.logme.log(SERVER_RUNNING_MSG, 'info')
+                fyrd.logme.log(SERVER_RUNNING_MSG, 'info', logfile=sys.stdout)
             else:
-                fyrd.logme.log(SERVER_NOT_RUNNING_MSG, 'info')
+                fyrd.logme.log(SERVER_NOT_RUNNING_MSG, 'info',
+                               logfile=sys.stdout)
             return fyrd.FYRD_SUCCESS \
                 if running else fyrd.FYRD_NOT_RUNNING_ERROR
 

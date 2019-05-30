@@ -464,7 +464,7 @@ class BatchSystemServer(object):
         if self._server_running():
             self.running = True
             _logme.log('Daemon is already running on port {}'.format(port),
-                       'error')
+                       'error', logfile=_sys.stdout)
             return FYRD_STILL_RUNNING_ERROR
 
         args = {}
@@ -520,10 +520,12 @@ class BatchSystemServer(object):
             # Wait some time to make sure the process started
             _time.sleep(1)
             if self._server_running():
-                _logme.log('Server has started correctly', 'info')
+                _logme.log('Server has started correctly', 'info',
+                           logfile=_sys.stdout)
                 return FYRD_SUCCESS
             else:
-                _logme.log('Server has not started correctly', 'error')
+                _logme.log('Server has not started correctly', 'error',
+                           logfile=_sys.stdout)
                 return FYRD_NOT_RUNNING_ERROR
 
     @Pyro4.expose
