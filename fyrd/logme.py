@@ -143,7 +143,7 @@ def log(message, level='info', logfile=None, also_write=None,
     if also_write == 'stdout' and not stdout:
         _logit(message, sys.stdout, level, color=True, min_level=min_level)
     elif also_write == 'stderr' and not stderr:
-        _logit(message, sys.stdout, level, color=True, min_level=min_level)
+        _logit(message, sys.stderr, level, color=True, min_level=min_level)
 
 
 def clear(infile):
