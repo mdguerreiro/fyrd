@@ -12,6 +12,9 @@ from fyrd import FYRD_SUCCESS, \
 import Pyro4
 from Pyro4.errors import ConnectionClosedError
 
+# Add Pyro4 remote traceback on exceptions
+_sys.excepthook = Pyro4.util.excepthook
+
 
 class BatchSystemError(Exception):
     """Exception raised when an error is returned from the batch system
