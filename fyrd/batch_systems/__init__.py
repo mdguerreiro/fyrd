@@ -76,8 +76,12 @@ def get_batch_system(qtype=None, remote=True, uri=None):
 
     remote_str = 'remote' if remote else 'local'
     if qtype in _client_batches[remote_str].keys():
-        return _client_batches[remote_str][qtype]
-        
+        # Check that URI matches with the one defined by the client instance,
+        # otherwise create a new batch client instance to be returned.
+        if uri == _client_batches[remote_str][qtype].uri:
+            return _client_batches[remote_str][qtype]
+        _client_batches[remote_str][qtype].release()
+
     client, server = _default_batches[qtype]
     if remote:
         _client_batches['remote'][qtype] = client(remote=True, uri=uri)

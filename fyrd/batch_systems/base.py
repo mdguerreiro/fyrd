@@ -169,7 +169,7 @@ class BatchSystemClient(object):
         try:
             server.ping()
             return True
-        except ConnectionClosedError:
+        except Pyro4.errors.CommunicationError:
             return False
 
     def is_module_installed(self, module):
