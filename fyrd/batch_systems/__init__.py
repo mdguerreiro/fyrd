@@ -74,14 +74,16 @@ def get_batch_system(qtype=None, remote=True, uri=None):
                 'server and the URI must be specified.'
                 )
 
+    # If a client and server already exist for the qtype return these if:
+    # - URI passed matches with the one configured for them, or
+    # - No URI has been specified and server connection does need to change.
     remote_str = 'remote' if remote else 'local'
     if qtype in _client_batches[remote_str].keys():
-        # Check that URI matches with the one defined by the client instance,
-        # otherwise create a new batch client instance to be returned.
-        if uri == _client_batches[remote_str][qtype].uri:
+        if not uri or uri == _client_batches[remote_str][qtype].uri:
             return _client_batches[remote_str][qtype]
         _client_batches[remote_str][qtype].release()
 
+    # Otherwise create a new batch client and server instance to that URI.
     client, server = _default_batches[qtype]
     if remote:
         _client_batches['remote'][qtype] = client(remote=True, uri=uri)
