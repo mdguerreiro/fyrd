@@ -180,6 +180,10 @@ SLURM  = _OD([
      {'help': 'Number of tasks per node',
       'slurm': '--tasks-per-node={}', 'type': (str, int),
       'default': None}),
+    ('exclusive',
+     {'help': 'Allocates nodes in exclusive mode',
+      'slurm': '--exclusive', 'type': str,
+      'default': None}),
 ])
 
 ################################################################

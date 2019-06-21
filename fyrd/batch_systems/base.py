@@ -3,6 +3,7 @@ import os as _os
 import time as _time
 import errno as _errno
 import pkgutil as _pkgutil
+from functools import wraps
 
 from fyrd import logme as _logme
 from fyrd import conf as _conf
@@ -12,8 +13,47 @@ from fyrd import FYRD_SUCCESS, \
 import Pyro4
 from Pyro4.errors import ConnectionClosedError
 
-# Add Pyro4 remote traceback on exceptions
+# Add Pyro4 remote traceback on exceptions, only shown after exit.
 _sys.excepthook = Pyro4.util.excepthook
+
+
+def pyro_traceback(func):
+    """Decorator to add Pyro4 server traceback in case of exception.
+    """
+    @wraps(func)
+    def wrapper_pyro_traceback(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            msg = ''.join(Pyro4.util.getPyroTraceback()).strip()
+            raise type(e)(msg) from e
+    return wrapper_pyro_traceback
+
+
+class MetaClassDecorator(type):
+    """
+        MetaClass used to add decorators to all members of a derived class.
+        One advantage compared to class decorators is the fact that subclasses
+        inherit the metaclass.
+
+        The __new__ method is called to create and allocate the derived class
+        instance, and requires three arguments used for `type` constructor:
+            * name of the class (name)
+            * list of base classes (bases)
+            * dictionary with local attributes and methods (local)
+
+        The modified __dict__ with the decorators is used on the type.__new__
+        constructor and returned as the Class object.
+
+    """
+    def __new__(cls, name, bases, local):
+        # Check any member in __dict__ that is callable,
+        # and add the decorator on it.
+        for attr in local:
+            value = local[attr]
+            if callable(value):
+                local[attr] = pyro_traceback(value)
+        return type.__new__(cls, name, bases, local)
 
 
 class BatchSystemError(Exception):
@@ -25,7 +65,7 @@ class BatchSystemError(Exception):
         self.stderr = stderr
 
 
-class BatchSystemClient(object):
+class BatchSystemClient(metaclass=MetaClassDecorator):
     NAME = None
 
     @property
@@ -78,7 +118,7 @@ class BatchSystemClient(object):
             if uri:
                 self.uri = uri
             else:
-                self.uri = _conf.get_option(self.NAME, 'uri')
+                self.uri = _conf.get_option(self.NAME, 'server_uri')
                 _logme.log('Getting uri from config file', 'info')
                 if not self.uri:
                     raise ValueError('Can\'t find URI in config file.')

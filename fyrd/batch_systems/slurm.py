@@ -548,4 +548,8 @@ class SlurmClient(BatchSystemClient):
             cpt = int(option_dict.pop('tasks_per_node'))
             outlist.append('#SBATCH --tasks-per-node {}'.format(cpt))
 
+        if 'exclusive' in option_dict:
+            option_dict.pop('exclusive')
+            outlist.append('#SBATCH --exclusive')
+
         return outlist, option_dict, None

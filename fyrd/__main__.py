@@ -712,7 +712,7 @@ def manage_daemon(args):
             fyrd.logme.log('Uri file not found', 'warn')
         if not uri:
             try:
-                uri = fyrd.conf.get_option(args.batch, 'uri', None)
+                uri = fyrd.conf.get_option(args.batch, 'server_uri', None)
             except ValueError:
                 # Section not in config file
                 pass
