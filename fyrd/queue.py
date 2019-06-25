@@ -166,6 +166,11 @@ class Queue(object):
             _batch.check_queue(qtype, remote=remote, uri=uri)
         else:
             _batch.check_queue(remote=remote, uri=uri)
+
+        # Update qtype in case of 'auto'
+        if qtype == 'auto':
+            qtype = _batch.MODE
+
         self.qtype = qtype if qtype else _batch.MODE
         self.batch_system = _batch.get_batch_system(self.qtype,
                                                     remote=remote,

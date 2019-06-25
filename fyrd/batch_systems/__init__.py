@@ -58,6 +58,7 @@ def get_batch_system(qtype=None, remote=True, uri=None):
     global _client_batches
     global MODE
 
+    # First time connect with a generic client to figure out queue type
     if qtype == 'auto':
         if remote and uri:
             tmp_cli = BatchSystemClient(remote=remote, uri=uri)

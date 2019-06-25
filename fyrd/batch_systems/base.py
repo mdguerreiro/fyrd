@@ -112,7 +112,7 @@ class BatchSystemClient(metaclass=MetaClassDecorator):
         self.uri = None
         self.server = None
         self.connected = False
-        self.max_con_retries = 2
+        self.max_con_retries = 10
 
         if self.remote:
             if uri:
@@ -186,6 +186,7 @@ class BatchSystemClient(metaclass=MetaClassDecorator):
                            "retrying ({}/{}).".format(i + 1,
                                                       self.max_con_retries),
                            'error')
+                _time.sleep(3)
 
         if i == (self.max_con_retries - 1):
             _logme.log(
