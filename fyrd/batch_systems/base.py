@@ -13,17 +13,36 @@ from fyrd import FYRD_SUCCESS, \
 import Pyro4
 from Pyro4.errors import ConnectionClosedError
 
+
 # Add Pyro4 remote traceback on exceptions, only shown after exit.
 _sys.excepthook = Pyro4.util.excepthook
 
 
+# Set Fyrd Clients to work in stateless mode (disconnect after each request)
+# This option is here in order to free server threads from the pool.
+# There is no need to bind again the proxy (_pyroBind, _pyroReconnect) given
+# that Pyro4 automatically reconnects in _pyroInvoke if proxy is disconnected.
+# Note: this option is only recommended in SERVERTYPE=thread on fyrd server.
+STATELESS_CONNECTION = False
+PERSISTENT_LIST = ['__init__', '__del__', 'get_uri', 'get_server', 'release']
+
+
 def pyro_traceback(func):
-    """Decorator to add Pyro4 server traceback in case of exception.
+    """
+        Decorator to add Pyro4 server traceback in case of exception and
+        stateless connection (disconnect after some client calls).
+
     """
     @wraps(func)
     def wrapper_pyro_traceback(*args, **kwargs):
         try:
-            return func(*args, **kwargs)
+            ret = func(*args, **kwargs)
+            # If stateless option is enabled and class method not in persistent
+            # disconnect from server to free thread from pool at server side
+            if STATELESS_CONNECTION and func.__name__ not in PERSISTENT_LIST:
+                # args[0] is self (BatchSystemClient base instance)
+                args[0].release(force=True)
+            return ret
         except Exception as e:
             msg = ''.join(Pyro4.util.getPyroTraceback()).strip()
             raise type(e)(msg) from e
@@ -200,9 +219,10 @@ class BatchSystemClient(metaclass=MetaClassDecorator):
         self.server = server
         return True
 
-    def release(self):
-        if self.connected:
-            self.server._pyroRelease()
+    def release(self, force=False):
+        if self.connected or force:
+            server = self.get_server()
+            server._pyroRelease()
             self.connected = False
 
     def is_server_running(self):

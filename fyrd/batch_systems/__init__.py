@@ -69,6 +69,7 @@ def get_batch_system(qtype=None, remote=True, uri=None):
                 return None
             qtype = tmp_cli.qtype
             MODE = qtype
+            tmp_cli.release()
         else:
             raise ValueError(
                 'To automatically get queue type, there must be a remote '
