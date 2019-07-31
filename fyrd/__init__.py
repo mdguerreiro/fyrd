@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Submit jobs to slurm or torque, or with multiprocessing.
+Submit jobs to slurm or torque, or lsf, or with multiprocessing.
 
  =============== ===================================================
          AUTHOR: Michael D Dacre, mike.dacre@gmail.com
@@ -12,7 +12,7 @@ Submit jobs to slurm or torque, or with multiprocessing.
  =============== ===================================================
 
 Allows simple job submission with *dependency tracking and queue waiting* with
-either torque or slurm. It uses simple techiques to avoid overwhelming the
+either torque, slurm or lsf. It uses simple techiques to avoid overwhelming the
 queue and to catch bugs on the fly.
 
 Setting Environment

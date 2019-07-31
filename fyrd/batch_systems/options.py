@@ -10,6 +10,7 @@ Options are defined in dictionaries with the syntax::
     {'name': {
         'slurm': The command to be used for slurm
         'torque': The command to be used for torque
+        'lsf': The command to be used for lsf
         'default': The default to use if not set
         'type': The python object type for the option
         'help': A string with help information
@@ -52,7 +53,8 @@ __all__ = ['option_help']
 #      type: python type to convert option into
 #     slurm: the string to format args into for slurm
 #    torque: the string to format args into for torque
-# [s|t]join: used to join list types for slurm or torque
+#    lsf: the string to format args into for lsf
+# [s|t]join: used to join list types for slurm, torque or lsf
 #      help: Info for the user on the option
 
 # Options available in all modes
@@ -93,18 +95,18 @@ COMMON  = _OD([
     ('runpath',
      {'help': 'The working directory for the job',
       'default': '.', 'type': str,
-      'slurm': '--workdir={}', 'torque': '-d {}'}),
+      'slurm': '--workdir={}', 'torque': '-d {}', 'lsf': '-cwd {}'}),
     ('suffix',
      {'help': 'A suffix to append to job files (e.g. job.suffix.qsub)',
       'default': 'cluster', 'type': str}),
     ('outfile',
      {'help': 'File to write STDOUT to',
       'default': None, 'type': str,
-      'slurm': '-o {}', 'torque': '-o {}'}),
+      'slurm': '-o {}', 'torque': '-o {}', 'lsf': '-oo {}'}),
     ('errfile',
      {'help': 'File to write STDERR to',
       'default': None, 'type': str,
-      'slurm': '-e {}', 'torque': '-e {}'}),
+      'slurm': '-e {}', 'torque': '-e {}', 'lsf': '-eo {}'}),
 ])
 
 # Options used in all batch systems
@@ -115,24 +117,26 @@ CLUSTER_CORE = _OD([
     ('features',
      {'help': 'A comma-separated list of node features to require',
       'slurm': '--constraint={}',  # Torque in options_to_string()
+      'lsf': '-R {}',
       'default': None, 'type': list, 'sjoin': '&'}),
     ('qos',
      {'help': 'A quality of service to require',
       'slurm': '--qos={}',  # Torque in options_to_string()
+      # LSF: not such option in this queue
       'default': None, 'type': str}),
     ('time',
      {'help': 'Walltime in HH:MM:SS',
       'default': '12:00:00', 'type': str,
-      'slurm': '--time={}', 'torque': '-l walltime={}'}),
-    # We explictly set MB in torque
+      'slurm': '--time={}', 'torque': '-l walltime={}', 'lsf': '-W {}'}),
+    # We explictly set MB in torque, lsf is MB by default
     ('mem',
      {'help': 'Memory to use in MB (e.g. 4000)',
       'default': None, 'type': (int, str),
-      'slurm': '--mem={}', 'torque': '-l mem={}MB'}),
+      'slurm': '--mem={}', 'torque': '-l mem={}MB', 'lsf': '-M {}'}),
     ('partition',
      {'help': 'The partition/queue to run in (e.g. local/batch)',
       'default': None, 'type': str,
-      'slurm': '-p {}', 'torque': '-q {}'}),
+      'slurm': '-p {}', 'torque': '-q {}', 'lsf': '-q {}'}),
 ])
 
 # Note: There are many more options, as them as need to the following lists,
@@ -144,11 +148,11 @@ CLUSTER_CORE = _OD([
 CLUSTER_OPTS = _OD([
     ('account',
      {'help': 'Account to be charged', 'default': None, 'type': str,
-      'slurm': '--account={}', 'torque': '-A {}'}),
+      'slurm': '--account={}', 'torque': '-A {}', 'lsf': '-G {}'}),
     ('export',
      {'help': 'Comma separated list of environmental variables to export',
       'default': None, 'type': str,
-      'slurm': '--export={}', 'torque': '-v {}'}),
+      'slurm': '--export={}', 'torque': '-v {}', 'lsf': '-env {}'}),
 ])
 
 ###############################################################################
@@ -183,6 +187,31 @@ SLURM  = _OD([
     ('exclusive',
      {'help': 'Allocates nodes in exclusive mode',
       'slurm': '--exclusive', 'type': str,
+      'default': None}),
+])
+
+###############################################################################
+#                                LSF Options                                  #
+#  from: https://hpc.llnl.gov/banks-jobs/running-jobs/batch-system-commands   #
+#  ibm.com/support/knowledgecenter/en/SSETD4_9.1.2/lsf_command_ref/bjobs.1.html
+###############################################################################
+
+LSF = _OD([
+    ('begin',
+     {'help': 'Start after this much time',
+      'lsf': '-b {}', 'type': str,
+      'default': None}),
+    ('tasks',
+     {'help': 'Total number of tasks',
+      'slurm': '-n {}', 'type': (str, int),
+      'default': None}),
+    ('tasks_per_node',
+     {'help': 'Number of tasks per node',
+      'slurm': '-R "span[ptile={}]', 'type': (str, int),
+      'default': None}),
+    ('exclusive',
+     {'help': 'Allocates nodes in exclusive mode',
+      'slurm': '-x', 'type': str,
       'default': None}),
 ])
 
@@ -239,6 +268,10 @@ TORQUE_KWDS = COMMON.copy()
 for kds in [CLUSTER_CORE, CLUSTER_OPTS, TORQUE]:
     TORQUE_KWDS.update(kds)
 
+LSF_KWDS = COMMON.copy()
+for kds in [CLUSTER_CORE, CLUSTER_OPTS, LSF]:
+    TORQUE_KWDS.update(kds)
+
 CLUSTER_KWDS = SLURM_KWDS.copy()
 CLUSTER_KWDS.update(TORQUE_KWDS)
 
@@ -246,6 +279,7 @@ CLUSTER_KWDS.update(TORQUE_KWDS)
 BATCH_KWDS = {
     'slurm': SLURM_KWDS,
     'torque': TORQUE_KWDS,
+    'lsf': LSF_KWDS
 }
 
 ALL_KWDS = CLUSTER_KWDS.copy()
@@ -417,7 +451,7 @@ def check_arguments(kwargs):
 
 
 def option_to_string(option, value=None, qtype=None):
-    """Return a string with an appropriate flag for slurm or torque.
+    """Return a string with an appropriate flag for slurm, torque or lsf.
 
     Parameters
     ----------
@@ -591,7 +625,7 @@ def option_help(mode='string', qtype=None, tablefmt='simple'):
     cluster = CLUSTER_CORE.copy()
     cluster.update(CLUSTER_OPTS)
     hlp['cluster'] = {
-        'summary': 'Options that work in both slurm and torque',
+        'summary': 'Options that work in both slurm, torque and lsf',
         'help': cluster,
     }
 
@@ -607,13 +641,21 @@ def option_help(mode='string', qtype=None, tablefmt='simple'):
             'help': SLURM,
         }
 
+    if LSF:
+        hlp['lsf'] = {
+            'summary': "Used for lsf only",
+            'help': LSF,
+        }
+
     if qtype:
         if qtype == 'slurm':
             hlp.pop('torque')
         elif qtype == 'torque':
             hlp.pop('slurm')
+        elif qtype == 'lsf':
+            hlp.pop('lsf')
         else:
-            raise ClusterError('qtype must be "torque", "slurm"')
+            raise ClusterError('qtype must be "torque", "slurm" or "lsf"')
 
     if mode == 'print' or mode == 'string':
         outstr = ''

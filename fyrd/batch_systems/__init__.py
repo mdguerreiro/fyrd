@@ -17,13 +17,14 @@ from importlib import import_module as _import
 
 from . import slurm as _slurm
 from . import torque as _torque
+from . import lsf as _lsf
 from .base import BatchSystemError, BatchSystemClient
 
 from .. import run as _run
 from .. import logme as _logme
 from .. import ClusterError as _ClusterError
 
-DEFINED_SYSTEMS = {'torque', 'slurm', 'local', 'auto'}
+DEFINED_SYSTEMS = {'torque', 'slurm', 'lsf', 'local', 'auto'}
 
 MODE = None
 
@@ -40,6 +41,7 @@ DONE_STATES = GOOD_STATES + BAD_STATES
 
 _default_batches = {'slurm': [_slurm.SlurmClient, _slurm.SlurmServer],
                     'torque': [_torque.TorqueClient, _torque.TorqueServer],
+                    'lsf': [_lsf.LSFClient, _lsf.LSFServer],
                     'local': [None, None]}
 
 # Save the client instances
@@ -147,12 +149,16 @@ def get_cluster_environment(overwrite=False):
         # Hardcode queue lookups here
         sbatch_cmnd = _conf.get_option('queue', 'sbatch')
         qsub_cmnd   = _conf.get_option('queue', 'qsub')
+        bsub_cmnd   = _conf.get_option('queue', 'bsub')
         sbatch_cmnd = sbatch_cmnd if sbatch_cmnd else 'sbatch'
         qsub_cmnd   = qsub_cmnd if qsub_cmnd else 'qsub'
+        bsub_cmnd   = bsub_cmnd if bsub_cmnd else 'bsub'
         if _run.which(sbatch_cmnd):
             MODE = 'slurm'
         elif _run.which(qsub_cmnd):
             MODE = 'torque'
+        elif _run.which(bsub_cmnd):
+            MODE = 'lsf'
         else:
             MODE = 'local'
     else:

@@ -107,7 +107,7 @@ class BatchSystemClient(metaclass=MetaClassDecorator):
 
         To get the proper configuration values the ``NAME`` attribute must
         be set in the subclasses to the batch system name (``slurm``,
-        ``local``, ``torque``...)
+        ``local``, ``torque``, ``lsf``...)
 
         Parameters
         ----------
@@ -474,7 +474,7 @@ class BatchSystemServer(object):
 
         To get the proper configuration values the ``NAME`` attribute must
         be set in the subclasses to the batch system name (``slurm``,
-        ``local``, ``torque``...)
+        ``local``, ``torque``, ``lsf``...)
 
         Parameters
         ----------

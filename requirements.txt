@@ -1,5 +1,5 @@
 # Requirements for Fyrd
-cloudpickle>=0.6.1
+cloudpickle==1.0.0
 psutil>=5.2
 Pyro4>=4.70
 six>=1.11.0

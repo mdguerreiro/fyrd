@@ -247,6 +247,7 @@ Caution:
         .<suffix>.out
         .<suffix>.sbatch & .fyrd.script for slurm mode
         .<suffix>.qsub for torque mode
+        .<suffix>.bsub for lsf mode
         .<suffix> for local mode
         _func.<suffix>.py
         _func.<suffix>.py.pickle.in
@@ -1222,7 +1223,7 @@ def command_line_parser():
     clean.add_argument('-s', '--suffix',
                        default=fyrd.conf.get_option('jobs', 'suffix'),
                        help="Suffix to use for cleaning")
-    clean.add_argument('-q', '--qtype', choices=('torque', 'slurm', 'local'),
+    clean.add_argument('-q', '--qtype', choices=('torque', 'slurm', 'lsf', 'local'),
                        help="Limit deletions to this qtype")
 
     # We store this as false as the question is a negative

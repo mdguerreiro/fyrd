@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SLURM parsing functions.
+LSF parsing functions.
 """
 import os as _os
 import re as _re
@@ -24,44 +24,78 @@ from .base import BatchSystemClient, BatchSystemServer
 
 _Script = _sscrpt.Script
 
-SUFFIX = 'sbatch'
+SUFFIX = 'lsf'
 
 
 @Pyro4.expose
-class SlurmServer(BatchSystemServer):
-    NAME = 'slurm'
+class LSFServer(BatchSystemServer):
+    NAME = 'lsf'
 
     def metrics(self, job_id=None):
+        """Iterator to get metrics from LSF system.
+
+        Parameters
+        ----------
+        job_id: str, optional
+            Job ID to filter the queue with
+
+        Yields
+        ------
+        line : str
+
+        """
         _logme.log('Getting job metrics', 'debug')
 
+        # No data for the following tags in LSF:
+        #   'AveCPUFreq', 'AveDiskRead', 'AveDiskWrite', 'ConsumedEnergy'
+        # So we fill them with None.
+        # Use 'exit_code' as None flag
+        none = 'exit_code'
+        fwdth = 400  # Used for fixed-width parsing of bjobs
         fields = (
-            'JobID', 'Partition', 'AllocCPUs', 'AllocNodes', 'AllocTres',
-            'AveCPUFreq', 'AveDiskRead', 'AveDiskWrite', 'AveRSS',
-            'ConsumedEnergy', 'Submit', 'Start', 'End', 'Elapsed'
-            )
-        qargs = [
-            'sacct', '-p', '--noheader', '--noconvert',
-            '--format={}'.format(','.join(fields))
-            ]
-        if job_id:
-            qargs.append('-j {}'.format(job_id))
-        try:
-            sacct = [tuple(i.strip(' |').split('|')) for i in
-                     _run.cmd(qargs)[1].split('\n')]
-        except Exception as e:
-            _logme.log('Error running sacct to get the metrics', 'error')
-            sacct = []
+            'jobid', 'queue', 'exec_host', 'nexec_host', 'effective_resreq',
+            none, none, none, 'mem', none,
+            'submit_time', 'start_time', 'finish_time', 'run_time'
+        )
+        flen = len(fields)
 
-        for line in sacct:
+        # Arguments used for bjobs:
+        #   - noheader: remove header from 1st row
+        #   - a: show jobs in all states
+        #   - X: display uncondensed output for hosts
+        #   - o: customized output formats
+        #   - jobid: get metrics only for that job
+        #
+        qargs = [
+            'bjobs', '-noheader', '-a', '-X', '-o',
+            '"{}"'.format(' '.join(['{0}:{1}'.format(field, fwdth)
+                                    for field in fields]))
+        ]
+        if job_id:
+            qargs.append(' {}'.format(job_id))
+
+        try:
+            bjobs = [
+                tuple(
+                    [k[i:i+fwdth].rstrip() if field != none else "None"
+                     for i, field in zip(range(0, fwdth*flen, fwdth), fields)]
+                ) for k in _run.cmd(qargs)[1].split('\n')
+            ]
+        except Exception as e:
+            _logme.log('Error running bjobs to get the metrics: {}'
+                       .format(str(e)), 'error')
+            bjobs = []
+
+        for line in bjobs:
             yield line
 
     ###########################################################################
     #                           Functionality Test                            #
     ###########################################################################
     def queue_test(self, warn=True):
-        """Check that slurm can be used.
+        """Check that LSF can be used.
 
-        Just looks for sbatch and squeue.
+        Just looks for bsub and bjobs.
 
         Parameters
         ----------
@@ -73,42 +107,42 @@ class SlurmServer(BatchSystemServer):
         batch_system_functional : bool
         """
         log_level = 'error' if warn else 'debug'
-        sbatch = _conf.get_option('queue', 'sbatch')
-        if (sbatch is not None and _os.path.dirname(sbatch)
-                and not _run.is_exe(sbatch)):
+        bsub = _conf.get_option('queue', 'bsub')
+        if (bsub is not None and _os.path.dirname(bsub)
+                and not _run.is_exe(bsub)):
             _logme.log(
-                'Cannot use slurm as sbatch path set in conf to {0}'
-                .format(sbatch) + ' but that path is not an executable',
+                'Cannot use LSF as sbatch path set in conf to {0}'
+                .format(bsub) + ' but that path is not an executable',
                 log_level
             )
             return False
-        sbatch = sbatch if sbatch else 'sbatch'
-        sbatch = _run.which(sbatch) if not _os.path.dirname(sbatch) else sbatch
-        if not sbatch:
+        bsub = bsub if bsub else 'bsub'
+        bsub = _run.which(bsub) if not _os.path.dirname(bsub) else bsub
+        if not bsub:
             _logme.log(
-                'Cannot use slurm as cannot find sbatch', log_level
+                'Cannot use LSF as cannot find bsub', log_level
             )
             return False
-        qpath = _os.path.dirname(sbatch)
-        squeue = _os.path.join(qpath, 'squeue')
-        return _run.is_exe(squeue)
+        qpath = _os.path.dirname(bsub)
+        bjobs = _os.path.join(qpath, 'bjobs')
+        return _run.is_exe(bjobs)
 
     ###########################################################################
     #                         Normalization Functions                         #
     ###########################################################################
     def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""
-        if '_' in job_id:
-            job_id, array_id = job_id.split('_')
-            job_id = job_id.strip()
-            array_id = array_id.strip()
-        else:
-            array_id = None
+        # Look for job_id and array_id.
+        # Arrays are specified in LSF using the following syntax:
+        #   - job_id[array_id] (e.g. 1234[1])
+        jobquery = _re.compile(r'(\d+)(\[(\d+)\])?')
+        job_id, _, array_id = jobquery.match(job_id).groups()
+
         return job_id, array_id
 
     def normalize_state(self, state):
-        """Convert state into standadized (slurm style) state."""
-        return state
+        """Convert state into standadized (LSF style) state."""
+        return state.lower()
 
     ###########################################################################
     #                             Job Submission                              #
@@ -140,7 +174,7 @@ class SlurmServer(BatchSystemServer):
         raise NotImplementedError()
 
     def submit(self, script_file_name, dependencies=None):
-        """Submit any file with dependencies to Slurm.
+        """Submit any file with dependencies to LSF.
 
         Parameters
         ----------
@@ -156,19 +190,22 @@ class SlurmServer(BatchSystemServer):
             If the execution have no errors, it returns the job_id as the
             result.
         """
-        _logme.log('Submitting to slurm', 'debug')
+        _logme.log('Submitting to LSF', 'debug')
         if dependencies:
-            deps = '--dependency=afterok:{}'.format(
-                ':'.join([str(d) for d in dependencies]))
-            args = ['sbatch', deps, script_file_name]
+            deps = '-w "{}"'.format(
+                '&&'.join(['done({})'.format(d) for d in dependencies]))
+            args = ['bsub', deps, '<', script_file_name]
         else:
-            args = ['sbatch', script_file_name]
+            args = ['bsub', '<', script_file_name]
         # Try to submit job 5 times
         code, stdout, stderr = _run.cmd(args, tries=5)
         if code == 0:
-            job_id, _ = self.normalize_job_id(stdout.split(' ')[-1])
+            # Job id is returned like this by LSF:
+            #   'Job <165793> is submitted to queue <sequential>.'
+            jobquery = _re.compile(r'<(\d+)>')
+            job_id, _ = self.normalize_job_id(jobquery.findall(stdout)[0])
         else:
-            _logme.log('sbatch failed with code {}\n'.format(code) +
+            _logme.log('bsub failed with code {}\n'.format(code) +
                        'stdout: {}\nstderr: {}'.format(stdout, stderr),
                        'critical')
             # raise _CalledProcessError(code, args, stdout, stderr)
@@ -193,7 +230,7 @@ class SlurmServer(BatchSystemServer):
         -------
         success : bool
         """
-        o = _run.cmd('scancel {0}'.format(' '.join(_run.listify(job_ids))),
+        o = _run.cmd('bkill {0}'.format(' '.join(_run.listify(job_ids))),
                      tries=5)
         return o[0] == 0
 
@@ -201,19 +238,17 @@ class SlurmServer(BatchSystemServer):
     #                              Queue Parsing                              #
     ###########################################################################
     def queue_parser(self, user=None, partition=None, job_id=None):
-        """Iterator for slurm queues.
+        """Iterator for LSF queues.
 
-        Use the `squeue -O` command to get standard data across implementation,
-        supplement this data with the results of `sacct`. sacct returns data
-        only for the current user but retains a much longer job history. Only
-        jobs not returned by squeue are added with sacct, and they are added
-        to *the end* of the returned queue, i.e. *out of order with respect to
-        the actual queue*.
+        Use the `bjobs -o` command to get standard data across implementation.
+        To fully read all jobs (finished and unfinished), option `-a` is used.
+        Jobs are retired from the LSF history after reaching interval specified
+        by CLEAN_PERIOD in lsb.params (default period is 1 hour).
 
         Parameters
         ----------
         user : str, optional
-            User name to pass to qstat to filter queue with
+            User name to pass to bjobs to filter queue with
         partiton : str, optional
             Partition to filter the queue with
         job_id: str, optional
@@ -230,144 +265,112 @@ class SlurmServer(BatchSystemServer):
         nodelist : list
         numnodes : int
         cntpernode : int or None
-        exit_code : int or Nonw
+        exit_code : int or None
         """
         try:
             if job_id:
                 int(job_id)
         except ValueError:
             job_id = None
-        nodequery = _re.compile(r'([^\[,]+)(\[[^\[]+\])?')
-        fwdth = 400  # Used for fixed-width parsing of squeue
+
+        fwdth = 400  # Used for fixed-width parsing of bjobs
         fields = [
-            'jobid', 'arraytaskid', 'name', 'userid', 'partition',
-            'state', 'nodelist', 'numnodes', 'numcpus', 'exit_code'
+            'jobid', 'name', 'user', 'queue', 'stat',
+            'exec_host', 'nexec_host', 'slots', 'exit_code'
         ]
         flen = len(fields)
+
+        # Arguments used for bjobs:
+        #   - noheader: remove header from 1st row
+        #   - a: show jobs in all states
+        #   - X: display uncondensed output for hosts
+        #   - o: customized output formats
+        #
         qargs = [
-            'squeue', '-h', '-O',
-            ','.join(['{0}:{1}'.format(field, fwdth) for field in fields])
+            'bjobs', '-noheader', '-a', '-X', '-o',
+            '"{}"'.format(' '.join(['{0}:{1}'.format(field, fwdth)
+                                    for field in fields]))
         ]
+        #
         # Parse queue info by length
-        squeue = [
+        #  - Each job entry is separated by '\n'
+        #  - Each job entry is a tuple with each field value
+        # [ (fld1, fld2, fl3, ...), (...) ]
+        #
+        # bjobs returns 'No unfinished job found' on stderr when list is empty
+        #
+        bjobs = [
             tuple(
                 [k[i:i+fwdth].rstrip() for i in range(0, fwdth*flen, fwdth)]
             ) for k in _run.cmd(qargs)[1].split('\n')
         ]
-        # SLURM sometimes clears the queue extremely fast, so we use sacct
-        # to get old jobs by the current user
-        qargs = ['sacct', '-p',
-                 '--format=jobid,jobname,user,partition,state,' +
-                 'nodelist,reqnodes,ncpus,exitcode']
-        try:
-            sacct = [tuple(i.strip(' |').split('|')) for i in
-                     _run.cmd(qargs)[1].split('\n')]
-            sacct = sacct[1:]
-        # This command isn't super stable and we don't care that much, so I
-        # will just let it die no matter what
-        except Exception as e:
-            if _logme.MIN_LEVEL == 'debug':
-                raise e
-            else:
-                sacct = []
-
-        if sacct:
-            if len(sacct[0]) != 9:
-                _logme.log('sacct parsing failed unexpectedly as there  ' +
-                           'are not 9 columns, aborting.', 'critical')
-                raise ValueError('sacct output does not have 9 columns. Has:' +
-                                 '{}: {}'.format(len(sacct[0]), sacct[0]))
-            jobids = [i[0] for i in squeue]
-            for sinfo in sacct:
-                # Skip job steps, only index whole jobs
-                if '.' in sinfo[0]:
-                    _logme.log('Skipping {} '.format(sinfo[0]) +
-                               "in sacct processing as it is a job part.",
-                               'verbose')
-                    continue
-                # These are the values I expect
-                try:
-                    [sid, sname, suser, spartition, sstate,
-                     snodelist, snodes, scpus, scode] = sinfo
-                    sid, sarr = self.normalize_job_id(sid)
-                except ValueError as err:
-                    _logme.log(
-                            'sacct parsing failed with error {} '.format(err) +
-                            'due to an incorrect number of entries.\n' +
-                            'Contents of sinfo:\n{}\n'.format(sinfo) +
-                            'Expected 10 values\n:' +
-                            '[sid, sarr, sname, suser, spartition, sstate, ' +
-                            'snodelist, snodes, scpus, scode]',
-                            'critical')
-                    raise
-                # Skip jobs that were already in squeue
-                if sid in jobids:
-                    _logme.log('{} still in squeue output'.format(sid),
-                               'verbose')
-                    continue
-                scode = int(scode.split(':')[-1])
-                squeue.append((sid, sarr, sname, suser, spartition, sstate,
-                               snodelist, snodes, scpus, scode))
-        else:
-            _logme.log('No job info in sacct', 'debug')
 
         # Sanitize data
-        for sinfo in squeue:
-            if len(sinfo) == 10:
-                [sid, sarr, sname, suser, spartition, sstate, sndlst,
-                 snodes, scpus, scode] = sinfo
-            else:
-                _sys.stderr.write('{}'.format(repr(sinfo)))
-                raise _ClusterError('Queue parsing error, expected 10 items '
-                                    'in output of squeue and sacct, got {}\n'
-                                    .format(len(sinfo)))
-            if partition and spartition != partition:
-                continue
-            if not isinstance(sid, (_str, _txt)):
-                sid = str(sid) if sid else None
-            else:
-                sarr = None
-            if not isinstance(snodes, _int):
-                snodes = int(snodes) if snodes else None
-            if not isinstance(scpus, _int):
-                scpus = int(scpus) if scpus else None
-            if not isinstance(scode, _int):
-                scode = int(scode) if scode else None
-            sstate = sstate.lower()
-            # Convert user from ID to name
-            if suser.isdigit():
-                suser = _pwd.getpwuid(int(suser)).pw_name
-            if user and suser != user:
-                continue
-            if job_id and (job_id != sid):
-                continue
-            # Attempt to parse nodelist
-            snodelist = []
-            if sndlst:
-                if nodequery.search(sndlst):
-                    nsplit = nodequery.findall(sndlst)
-                    for nrg in nsplit:
-                        node, rge = nrg
-                        if not rge:
-                            snodelist.append(node)
-                        else:
-                            for reg in rge.strip('[]').split(','):
-                                # Node range
-                                if '-' in reg:
-                                    start, end = [
-                                            int(i) for i in reg.split('-')
-                                            ]
-                                    for i in range(start, end):
-                                        snodelist.append(
-                                                '{}{}'.format(node, i)
-                                                )
-                                else:
-                                    snodelist.append('{}{}'.format(node, reg))
-                else:
-                    snodelist = sndlst.split(',')
+        for binfo in bjobs:
 
-            yield (sid, sarr, sname, suser, spartition, sstate, snodelist,
-                   snodes, scpus, scode)
+            if len(binfo) == len(fields):
+                # jobid -> bid ($jobid)
+                # name -> bname ($job_name | $job_name[#array_num])
+                # user -> buser ($user_name)
+                # queue -> bpartition ($queue)
+                # stat -> bstate (PEND | RUN | DONE | EXIT...)
+                # exec_host -> bndlst (cpus*nodeid:cpus*nodeid...)
+                # nexec_host -> bnodes ($num_nodes)
+                # slots -> bcpus ($total_tasks)
+                # exit_code -> bcode ($exit_code)
+                [bid, bname, buser, bpartition, bstate,
+                 bndlst, bnodes, bcpus, bcode] = binfo
+            else:
+                _sys.stderr.write('{}'.format(repr(binfo)))
+                raise _ClusterError('Queue parsing error, expected {} items '
+                                    'in output of bjobs, got {}\n'
+                                    .format(len(fields), len(binfo)))
+
+            # If not my partition go to next extry
+            if partition and bpartition != partition:
+                continue
+
+            # Normalize bid and barr
+            if not isinstance(bid, (_str, _txt)):
+                bid = str(bid) if bid else None
+            bid, barr = self.normalize_job_id(bid)
+
+            # Normalize nodes, cpus, state and exit_code
+            if not isinstance(bnodes, _int):
+                bnodes = int(bnodes) if bnodes else None
+            if not isinstance(bcpus, _int):
+                bcpus = int(bcpus) if bcpus else None
+            if not isinstance(bcode, _int):
+                try:
+                    bcode = int(bcode) if bcode else None
+                except ValueError:
+                    bcode = None
+            bstate = self.normalize_state(bstate)
+
+            # If user or job id are used to filter skip to next if not found
+            if buser.isdigit():
+                buser = _pwd.getpwuid(int(buser)).pw_name
+            if user and buser != user:
+                continue
+            if job_id and (job_id != bid):
+                continue
+
+            # Attempt to parse nodelist
+            #   LSF node list:"16*s01r1b14:16*s01r1b12:16*s01r1b08:16*s01r1b28"
+            bnodelist = []
+            nodequery = _re.compile(r'(\d+\*)?(\w+)')
+            if bndlst:
+                # [ (cores, node1), (cores, node2), ...]
+                if nodequery.search(bndlst):
+                    nsplit = nodequery.findall(bndlst)
+                    for nrg in nsplit:
+                        cores, node = nrg
+                        bnodelist.append(node)
+                else:
+                    bnodelist = bndlst.split(':')
+
+            yield (bid, barr, bname, buser, bpartition, bstate, bnodelist,
+                   bnodes, bcpus, bcode)
 
     def parse_strange_options(self, option_dict):
         """Parse all options that cannot be handled by the regular function.
@@ -393,14 +396,14 @@ class SlurmServer(BatchSystemServer):
         raise NotImplementedError
 
 
-class SlurmClient(BatchSystemClient):
+class LSFClient(BatchSystemClient):
     """Overwrite simple methods that can be executed in localhost, to avoid
     some network overhead.
     """
 
-    NAME = 'slurm'
-    PREFIX = '#SBATCH'
-    PARALLEL = 'srun'
+    NAME = 'lsf'
+    PREFIX = '#BSUB'
+    PARALLEL = 'mpirun'
 
     def metrics(self, job_id=None):
         server = self.get_server()
@@ -408,17 +411,16 @@ class SlurmClient(BatchSystemClient):
 
     def normalize_job_id(self, job_id):
         """Convert the job id into job_id, array_id."""
-        if '_' in job_id:
-            job_id, array_id = job_id.split('_')
-            job_id = job_id.strip()
-            array_id = array_id.strip()
-        else:
-            array_id = None
+        # Look for job_id and array_id:
+        # e.g.: 1234[1]
+        jobquery = _re.compile(r'(\d+)(\[(\d+)\])?')
+        job_id, _, array_id = jobquery.match(job_id).groups()
+
         return job_id, array_id
 
     def normalize_state(self, state):
-        """Convert state into standadized (slurm style) state."""
-        return state
+        """Convert state into standadized (LSF style) state."""
+        return state.lower()
 
     def gen_scripts(self, job_object, command, args, precmd, modstr):
         """Build the submission script objects.
@@ -468,7 +470,7 @@ class SlurmClient(BatchSystemClient):
 
     def submit(self, script, dependencies=None,
                job=None, args=None, kwds=None):
-        """Submit any file with dependencies to Slurm.
+        """Submit any file with dependencies to LSF.
 
         Parameters
         ----------
@@ -519,38 +521,57 @@ class SlurmClient(BatchSystemClient):
         """
         outlist = []
 
+        # Submitter should provide number of cores per node, otherwise we can
+        # not figure out cpus_per_task or nodes.
+        cores_per_node = None
+        if 'cores_per_node' in option_dict:
+            cores_per_node = int(option_dict.pop('cores_per_node'))
+
+        # Convert nodes to tasks (-n): use cores_per_node and nodes
         nodes = None
         if 'nodes' in option_dict:
-            n = option_dict.pop('nodes')
-            if isinstance(n, str) and n.isdigit():
-                nodes = int(n)
-                outlist.append('#SBATCH --nodes {}'.format(nodes))
+            if not cores_per_node:
+                raise _ClusterError('Error parsing LSF options: cannot set '
+                                    'the number of nodes in job without '
+                                    'specifying \'cores_per_node\' option')
 
+            nodes = int(option_dict.pop('nodes'))
+            outlist.append('{} -n {}'.format(self.PREFIX,
+                                             nodes * cores_per_node))
+
+        # Number of tasks (-n)
         tasks = None
         if 'tasks' in option_dict:
             tasks = int(option_dict.pop('tasks'))
-            outlist.append('#SBATCH --ntasks {}'.format(tasks))
+            outlist.append('{} -n {}'.format(self.PREFIX, tasks))
 
+        # Convert cpus_per_task to tasks_per_node (-span["ptile=#tasks_node"])
         if 'cpus_per_task' in option_dict:
+            if not cores_per_node:
+                raise _ClusterError('Error parsing LSF options: cannot set '
+                                    'the cpus per tasks in job without '
+                                    'specifying \'cores_per_node\' option')
+
             cores = int(option_dict.pop('cpus_per_task'))
-            outlist.append('#SBATCH --cpus-per-task {}'.format(cores))
+            tpn = cores_per_node / cores
+            outlist.append('{} -R "span[ptile={}]"'.format(self.PREFIX, tpn))
 
         # First look for tasks_per_node, if it's not there change to cores
         # Cores refers to the max number of processors to use per node (ppn)
         if 'tasks_per_node' in option_dict:
             tpn = int(option_dict.pop('tasks_per_node'))
-            outlist.append('#SBATCH --tasks-per-node {}'.format(tpn))
+            outlist.append('{} -R "span[ptile={}]"'.format(self.PREFIX, tpn))
             if 'cores' in option_dict:
                 # Avoid option parser to raise errors
                 option_dict.pop('cores')
         elif 'cores' in option_dict:
             cores = int(option_dict.pop('cores'))
-            if not nodes:
-                outlist.append('#SBATCH --nodes 1')
-            outlist.append('#SBATCH --tasks-per-node {}'.format(cores))
+            if not tasks:
+                outlist.append('{} -n 1'.format(self.PREFIX))
+            outlist.append('{} -R "span[ptile={}]"'.format(self.PREFIX, cores))
 
         if 'exclusive' in option_dict:
             option_dict.pop('exclusive')
-            outlist.append('#SBATCH --exclusive')
+            outlist.append('{} -x'.format(self.PREFIX))
 
         return outlist, option_dict, None
