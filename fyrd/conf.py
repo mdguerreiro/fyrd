@@ -78,6 +78,7 @@ DEFAULTS = {
         'queue_type':       'auto',
         'sbatch':           None, # Path to sbatch command
         'qsub':             None, # Path to qsub command
+        'bsub':             None, # Path to bsub command
         'progressbar':      True,
         'queue_maximums':   _os.path.join(
             CONFIG_PATH, 'queue_maximums.json'
@@ -154,7 +155,10 @@ CONF_HELP = {
             sbatch is not in the PATH.
         qsub : str
             A path to the qsub executable, only required for torque mode if
-            sbatch is not in the PATH.
+            qsub is not in the PATH.
+        bsub : str
+            A path to the qsub executable, only required for lsf mode if
+            bsub is not in the PATH.
         progressbar : bool
             Show a progress bar when waiting for jobs
         queue_maximums : str
