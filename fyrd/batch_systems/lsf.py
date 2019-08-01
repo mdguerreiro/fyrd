@@ -26,6 +26,21 @@ _Script = _sscrpt.Script
 
 SUFFIX = 'lsf'
 
+# Define lsf-to-slurm mappings
+LSF_SLURM_STATES = {
+    'PEND' : 'pending',     # PEND: Pending
+    'PROV' : 'pending',     # PROV: Proven state
+    'PSUSP' : 'suspended',  # PSUSP: Suspended (pending)
+    'RUN': 'running',       # RUN: Running
+    'USUSP': 'suspended',   # USUSP: Suspended while running
+    'SSUSP': 'suspended',   # SSUSP: Suspended by LSF
+    'DONE': 'completed',    # DONE: Done finished
+    'EXIT': 'failed',       # EXIT: Failure (exit code != 0)
+    'UNKWN': 'failed',      # UNKWN: Unknown
+    'WAIT': 'held',         # WAIT: Waiting for others (chunk job queue)
+    'ZOMBI': 'killed'       # ZOMBI: In zombi state
+}
+
 
 @Pyro4.expose
 class LSFServer(BatchSystemServer):
@@ -142,7 +157,9 @@ class LSFServer(BatchSystemServer):
 
     def normalize_state(self, state):
         """Convert state into standadized (LSF style) state."""
-        return state.lower()
+        if state.upper() in LSF_SLURM_STATES:
+            state = LSF_SLURM_STATES[state.upper()]
+        return state
 
     ###########################################################################
     #                             Job Submission                              #
@@ -301,8 +318,8 @@ class LSFServer(BatchSystemServer):
         #
         bjobs = [
             tuple(
-                [k[i:i+fwdth].rstrip() for i in range(0, fwdth*flen, fwdth)]
-            ) for k in _run.cmd(qargs)[1].split('\n')
+                [k[i:i+fwdth].strip() for i in range(0, fwdth*flen, fwdth)]
+            ) for k in _run.cmd(qargs)[1].split('\n') if k
         ]
 
         # Sanitize data
@@ -420,7 +437,9 @@ class LSFClient(BatchSystemClient):
 
     def normalize_state(self, state):
         """Convert state into standadized (LSF style) state."""
-        return state.lower()
+        if state.upper() in LSF_SLURM_STATES:
+            state = LSF_SLURM_STATES[state.upper()]
+        return state
 
     def gen_scripts(self, job_object, command, args, precmd, modstr):
         """Build the submission script objects.
@@ -533,45 +552,65 @@ class LSFClient(BatchSystemClient):
             if not cores_per_node:
                 raise _ClusterError('Error parsing LSF options: cannot set '
                                     'the number of nodes in job without '
-                                    'specifying \'cores_per_node\' option')
+                                    'specifying \'cores_per_node\' option.')
 
             nodes = int(option_dict.pop('nodes'))
-            outlist.append('{} -n {}'.format(self.PREFIX,
-                                             nodes * cores_per_node))
+            # 'tasks' option is not compatible with 'nodes'
+            if 'tasks' in option_dict:
+                option_dict.pop('tasks')
 
         # Number of tasks (-n)
         tasks = None
         if 'tasks' in option_dict:
             tasks = int(option_dict.pop('tasks'))
-            outlist.append('{} -n {}'.format(self.PREFIX, tasks))
 
         # Convert cpus_per_task to tasks_per_node (-span["ptile=#tasks_node"])
         if 'cpus_per_task' in option_dict:
             if not cores_per_node:
                 raise _ClusterError('Error parsing LSF options: cannot set '
                                     'the cpus per tasks in job without '
-                                    'specifying \'cores_per_node\' option')
+                                    'specifying \'cores_per_node\' option.')
 
-            cores = int(option_dict.pop('cpus_per_task'))
-            tpn = cores_per_node / cores
-            outlist.append('{} -R "span[ptile={}]"'.format(self.PREFIX, tpn))
+            cpus_per_task = int(option_dict.pop('cpus_per_task'))
+            tasks_per_node = max(cores_per_node / cpus_per_task, 1)
+            # 'tasks_per_node' option is not compatible with 'cpus_per_task'
+            if 'tasks_per_node' in option_dict:
+                option_dict.pop('tasks_per_node')
 
         # First look for tasks_per_node, if it's not there change to cores
         # Cores refers to the max number of processors to use per node (ppn)
         if 'tasks_per_node' in option_dict:
-            tpn = int(option_dict.pop('tasks_per_node'))
-            outlist.append('{} -R "span[ptile={}]"'.format(self.PREFIX, tpn))
+            tasks_per_node = int(option_dict.pop('tasks_per_node'))
             if 'cores' in option_dict:
                 # Avoid option parser to raise errors
                 option_dict.pop('cores')
         elif 'cores' in option_dict:
-            cores = int(option_dict.pop('cores'))
-            if not tasks:
-                outlist.append('{} -n 1'.format(self.PREFIX))
-            outlist.append('{} -R "span[ptile={}]"'.format(self.PREFIX, cores))
+            tasks_per_node = int(option_dict.pop('cores'))
+            if not nodes:
+                nodes = 1
+
+        # Use the final 'tasks_per_node' to define tasks if 'nodes' is passed
+        if nodes:
+            tasks = nodes * tasks_per_node
+
+        # Add the LSF parameters that define the job size (-n, and span[ptile])
+        outlist.append('{} -n {}'.format(self.PREFIX, tasks))
+        outlist.append('{} -R "span[ptile={}]"'.format(self.PREFIX,
+                                                       tasks_per_node))
 
         if 'exclusive' in option_dict:
             option_dict.pop('exclusive')
             outlist.append('{} -x'.format(self.PREFIX))
+
+        # Parse time in LSF no seconds -> [hour:]minutes (remove seconds)
+        if 'time' in option_dict:
+            time = option_dict.pop('time')
+            timequery = _re.compile(r'((\d+\:)?(\d+))')
+            time = timequery.search(time)[0]
+            outlist.append('{} -W {}'.format(self.PREFIX, time))
+
+        # Remove qos option if any
+        if 'qos' in option_dict:
+            option_dict.pop('qos')
 
         return outlist, option_dict, None

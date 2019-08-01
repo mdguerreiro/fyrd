@@ -621,6 +621,9 @@ class Job(object):
         name    = self._update_name()
         kwds    = self._kwargs
 
+        # Add name as the Job name for the queue
+        kwds['name'] = name
+
         # Get imports
         imports = kwds.pop('imports') if 'imports' in kwds else None
 

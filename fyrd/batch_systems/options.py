@@ -122,12 +122,13 @@ CLUSTER_CORE = _OD([
     ('qos',
      {'help': 'A quality of service to require',
       'slurm': '--qos={}',  # Torque in options_to_string()
-      # LSF: not such option in this queue
+      # LSF: not such option in this queue process it in options_to_string()
       'default': None, 'type': str}),
     ('time',
      {'help': 'Walltime in HH:MM:SS',
       'default': '12:00:00', 'type': str,
-      'slurm': '--time={}', 'torque': '-l walltime={}', 'lsf': '-W {}'}),
+    # LSF in parse_strange_options (remove seconds if any)
+      'slurm': '--time={}', 'torque': '-l walltime={}'}),
     # We explictly set MB in torque, lsf is MB by default
     ('mem',
      {'help': 'Memory to use in MB (e.g. 4000)',
@@ -137,6 +138,10 @@ CLUSTER_CORE = _OD([
      {'help': 'The partition/queue to run in (e.g. local/batch)',
       'default': None, 'type': str,
       'slurm': '-p {}', 'torque': '-q {}', 'lsf': '-q {}'}),
+    ('name',
+     {'help': 'Name for the job in the queue system',
+      'default': None, 'type': str,
+      'slurm': '--job-name={}', 'torque': '-N {}', 'lsf': '-J {}'}),
 ])
 
 # Note: There are many more options, as them as need to the following lists,
@@ -203,15 +208,19 @@ LSF = _OD([
       'default': None}),
     ('tasks',
      {'help': 'Total number of tasks',
-      'slurm': '-n {}', 'type': (str, int),
+      'lsf': '-n {}', 'type': (str, int),
       'default': None}),
     ('tasks_per_node',
      {'help': 'Number of tasks per node',
-      'slurm': '-R "span[ptile={}]', 'type': (str, int),
+      'lsf': '-R "span[ptile={}]', 'type': (str, int),
+      'default': None}),
+    ('cores_per_node',
+     {'help': 'Number of cores per node',
+      'lsf': '', 'type': (str, int),
       'default': None}),
     ('exclusive',
      {'help': 'Allocates nodes in exclusive mode',
-      'slurm': '-x', 'type': str,
+      'lsf': '-x', 'type': str,
       'default': None}),
 ])
 
@@ -270,10 +279,11 @@ for kds in [CLUSTER_CORE, CLUSTER_OPTS, TORQUE]:
 
 LSF_KWDS = COMMON.copy()
 for kds in [CLUSTER_CORE, CLUSTER_OPTS, LSF]:
-    TORQUE_KWDS.update(kds)
+    LSF_KWDS.update(kds)
 
 CLUSTER_KWDS = SLURM_KWDS.copy()
 CLUSTER_KWDS.update(TORQUE_KWDS)
+CLUSTER_KWDS.update(LSF_KWDS)
 
 # Should include the above in a dictionary by qtype
 BATCH_KWDS = {
