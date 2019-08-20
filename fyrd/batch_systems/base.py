@@ -614,7 +614,7 @@ class BatchSystemServer(object):
                 'debug')
 
         # Python3.7 compatibility
-        except ModuleNotFoundError:
+        except ImportError:
             _logme.log('Module {} is NOT installed'.format(module), 'debug')
             return False
 

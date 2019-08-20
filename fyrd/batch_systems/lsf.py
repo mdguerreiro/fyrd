@@ -6,6 +6,7 @@ import os as _os
 import re as _re
 import sys as _sys
 import pwd as _pwd     # Used to get usernames for queue
+import datetime as _dt
 
 from six import text_type as _txt
 from six import string_types as _str
@@ -28,9 +29,9 @@ SUFFIX = 'lsf'
 
 # Define lsf-to-slurm mappings
 LSF_SLURM_STATES = {
-    'PEND' : 'pending',     # PEND: Pending
-    'PROV' : 'pending',     # PROV: Proven state
-    'PSUSP' : 'suspended',  # PSUSP: Suspended (pending)
+    'PEND': 'pending',      # PEND: Pending
+    'PROV': 'pending',      # PROV: Proven state
+    'PSUSP': 'suspended',   # PSUSP: Suspended (pending)
     'RUN': 'running',       # RUN: Running
     'USUSP': 'suspended',   # USUSP: Suspended while running
     'SSUSP': 'suspended',   # SSUSP: Suspended by LSF
@@ -65,13 +66,15 @@ class LSFServer(BatchSystemServer):
         #   'AveCPUFreq', 'AveDiskRead', 'AveDiskWrite', 'ConsumedEnergy'
         # So we fill them with None.
         # Use 'exit_code' as None flag
-        none = 'exit_code'
+        none = 'user'
         fwdth = 400  # Used for fixed-width parsing of bjobs
         fields = (
             'jobid', 'queue', 'exec_host', 'nexec_host', 'effective_resreq',
             none, none, none, 'mem', none,
             'submit_time', 'start_time', 'finish_time', 'run_time'
         )
+        time_tags = [10, 11, 12]
+        elapsed_tag = 13
         flen = len(fields)
 
         # Arguments used for bjobs:
@@ -91,16 +94,24 @@ class LSFServer(BatchSystemServer):
 
         try:
             bjobs = [
-                tuple(
-                    [k[i:i+fwdth].rstrip() if field != none else "None"
+                [k[i:i+fwdth].strip() if field != none else "Not Available"
                      for i, field in zip(range(0, fwdth*flen, fwdth), fields)]
-                ) for k in _run.cmd(qargs)[1].split('\n')
+                for k in _run.cmd(qargs)[1].split('\n')
             ]
         except Exception as e:
             _logme.log('Error running bjobs to get the metrics: {}'
                        .format(str(e)), 'error')
             bjobs = []
 
+        # Normalize Time Tags from LSF format to SLURM format
+        for idx, job in enumerate(bjobs):
+            for tag in time_tags:
+                job[tag] = self.normalize_time(job[tag])
+
+            job[elapsed_tag] = self.normalize_elapsed(job[elapsed_tag])
+            bjobs[idx] = tuple(job)
+
+        # Yield metric iterator
         for line in bjobs:
             yield line
 
@@ -160,6 +171,63 @@ class LSFServer(BatchSystemServer):
         if state.upper() in LSF_SLURM_STATES:
             state = LSF_SLURM_STATES[state.upper()]
         return state
+
+    def normalize_time(self, lsf_time):
+        """Convert LSF time into standarized (LSF style) time:
+            LSF format:
+                * Aug 18 14:31 [E|L|X] (MMM DD HH:MM)
+
+                [E|L|X] Job estimation modifiers
+                - A dash indicates that the pending, suspended, or job with no
+                  run limit has no estimated finish time.
+
+            SLURM format:
+                * 2019-08-18T14:31:00 (YYYY-MM-DDTHH:MM:SS)
+        """
+        # LSF and SLURM formats
+        LSF_FORMAT = "%b %d %H:%M"
+        SLURM_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
+        # Dash indicates no estimated finish time
+        if lsf_time == '-':
+            return 'None'
+
+        # Remove optional job estimation modifiers [ELX]
+        timequery = _re.compile(r'^([^ELX]+)( [ELX])?$')
+        lsf_time, est_mod = timequery.match(lsf_time).groups()
+
+        # Convert to LSF time
+        date = _dt.datetime.strptime(lsf_time, LSF_FORMAT)
+        # Year is not included in LSF time! include current Year
+        date = date.replace(year=_dt.datetime.now().year)
+        _logme.log('date: {}'.format(date))
+        return date.strftime(SLURM_FORMAT)
+
+    def normalize_elapsed(self, lsf_elapsed):
+        """Convert LSF elapsed time into standarized (LSF style) time:
+            LSF format:
+                * 122 second(s)
+
+            SLURM format:
+                * 02:02 [DD-[HH:]]MM:SS
+        """
+        # Dash indicates no estimated finish time
+        if lsf_elapsed == '-':
+            return '00:00'
+
+        # Parse seconds from LSF format
+        elapsedquery = _re.compile(r'^(\d+) second\(s\)$')
+        lsf_elapsed = int(elapsedquery.match(lsf_elapsed).groups()[0])
+
+        # Convert to LSF elapsed format
+        elapsed = _dt.timedelta(seconds=lsf_elapsed)
+        days = elapsed.days
+        hours, remainder = divmod(elapsed.seconds, 3600)
+        minutes, seconds = divmod(remainder, 3600)
+        s = ("{:02d}-".format(days) if days else "") + \
+            ("{:02d}:".format(hours) if hours else "") + \
+            "{:02d}:{:02d}".format(minutes, seconds)
+        return s
 
     ###########################################################################
     #                             Job Submission                              #
