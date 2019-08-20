@@ -200,7 +200,6 @@ class LSFServer(BatchSystemServer):
         date = _dt.datetime.strptime(lsf_time, LSF_FORMAT)
         # Year is not included in LSF time! include current Year
         date = date.replace(year=_dt.datetime.now().year)
-        _logme.log('date: {}'.format(date))
         return date.strftime(SLURM_FORMAT)
 
     def normalize_elapsed(self, lsf_elapsed):
