@@ -228,6 +228,17 @@ class LSFServer(BatchSystemServer):
             "{:02d}:{:02d}".format(minutes, seconds)
         return s
 
+    def normalize_int(self, value):
+        """Convert possible int from job info (bjobs) into python3 int.
+           It can be '-' or '' if job is still pending or due to an error.
+        """
+        try:
+            int_value = int(value) if value else None
+        except ValueError:
+            int_value = None
+
+        return int_value
+
     ###########################################################################
     #                             Job Submission                              #
     ###########################################################################
@@ -420,15 +431,13 @@ class LSFServer(BatchSystemServer):
             bid, barr = self.normalize_job_id(bid)
 
             # Normalize nodes, cpus, state and exit_code
+            # '-'
             if not isinstance(bnodes, _int):
-                bnodes = int(bnodes) if bnodes else None
+                bnodes = self.normalize_int(bnodes)
             if not isinstance(bcpus, _int):
-                bcpus = int(bcpus) if bcpus else None
+                bcpus = self.normalize_int(bcpus)
             if not isinstance(bcode, _int):
-                try:
-                    bcode = int(bcode) if bcode else None
-                except ValueError:
-                    bcode = None
+                bcode = self.normalize_int(bcode)
             bstate = self.normalize_state(bstate)
 
             # If user or job id are used to filter skip to next if not found
@@ -607,20 +616,14 @@ class LSFClient(BatchSystemClient):
         """
         outlist = []
 
-        # Submitter should provide number of cores per node, otherwise we can
-        # not figure out cpus_per_task or nodes.
+        # Used to figure out tasks_per_node or cpus_per_task if not passed.
         cores_per_node = None
         if 'cores_per_node' in option_dict:
             cores_per_node = int(option_dict.pop('cores_per_node'))
 
-        # Convert nodes to tasks (-n): use cores_per_node and nodes
+        # Convert nodes to tasks (-n): use nodes and tasks_per_node
         nodes = None
         if 'nodes' in option_dict:
-            if not cores_per_node:
-                raise _ClusterError('Error parsing LSF options: cannot set '
-                                    'the number of nodes in job without '
-                                    'specifying \'cores_per_node\' option.')
-
             nodes = int(option_dict.pop('nodes'))
             # 'tasks' option is not compatible with 'nodes'
             if 'tasks' in option_dict:
@@ -630,19 +633,6 @@ class LSFClient(BatchSystemClient):
         tasks = None
         if 'tasks' in option_dict:
             tasks = int(option_dict.pop('tasks'))
-
-        # Convert cpus_per_task to tasks_per_node (-span["ptile=#tasks_node"])
-        if 'cpus_per_task' in option_dict:
-            if not cores_per_node:
-                raise _ClusterError('Error parsing LSF options: cannot set '
-                                    'the cpus per tasks in job without '
-                                    'specifying \'cores_per_node\' option.')
-
-            cpus_per_task = int(option_dict.pop('cpus_per_task'))
-            tasks_per_node = max(cores_per_node / cpus_per_task, 1)
-            # 'tasks_per_node' option is not compatible with 'cpus_per_task'
-            if 'tasks_per_node' in option_dict:
-                option_dict.pop('tasks_per_node')
 
         # First look for tasks_per_node, if it's not there change to cores
         # Cores refers to the max number of processors to use per node (ppn)
@@ -655,15 +645,43 @@ class LSFClient(BatchSystemClient):
             tasks_per_node = int(option_dict.pop('cores'))
             if not nodes:
                 nodes = 1
+        elif cores_per_node:
+            tasks_per_node = cores_per_node
+        else:
+            raise _ClusterError('Error parsing LSF options: cannot guess '
+                                'tasks_per_node in job without \'\' '
+                                'specifying \'cores_per_node\' option.')
+
+        # Use cpus_per_task for SMT affinity (affinity[core(#cores)])
+        if 'cpus_per_task' in option_dict:
+            cpus_per_task = int(option_dict.pop('cpus_per_task'))
+        elif cores_per_node and tasks_per_node:
+            cpus_per_task = max(cores_per_node // tasks_per_node, 1)
+        else:
+            raise _ClusterError('Error parsing LSF options: cannot guess '
+                                'cpus_per_task in job without \'\' '
+                                'specifying \'cores_per_node\' option.')
 
         # Use the final 'tasks_per_node' to define tasks if 'nodes' is passed
         if nodes:
             tasks = nodes * tasks_per_node
 
-        # Add the LSF parameters that define the job size (-n, and span[ptile])
+        # LSF is a bit special for pure threaded jobs, cpus_per_task must be
+        # specified then for tasks, span[ptile] args and affinity[core(1)].
+        if tasks == 1:
+            tasks = cpus_per_task
+            tasks_per_node = cpus_per_task
+            cpus_per_task = 1
+
+        # Add the LSF parameters that define the job size:
+        #   - Number of tasks (-n)
+        #   - Tasks per node (-R span[ptile=#tpn])
+        #   - Cpus per task (-R affinity[core(#cpt)])
         outlist.append('{} -n {}'.format(self.PREFIX, tasks))
         outlist.append('{} -R "span[ptile={}]"'.format(self.PREFIX,
                                                        tasks_per_node))
+        outlist.append('{} -R "affinity[core({})]"'.format(self.PREFIX,
+                                                           cpus_per_task))
 
         if 'exclusive' in option_dict:
             option_dict.pop('exclusive')

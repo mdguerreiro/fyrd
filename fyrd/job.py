@@ -537,24 +537,28 @@ class Job(object):
         self.suffix = (kwds.pop('suffix') if 'suffix' in kwds
                        else _conf.get_option('jobs', 'suffix'))
 
+        # Only if a profile is explicitly passed as argument to the job
         # Merge in profile, this includes all args from the DEFAULT profile
         # as well, ensuring that those are always set at a minumum.
-        profile = self.profile if self.profile else 'DEFAULT'
-        prof = _conf.get_profile(profile)
-        if not prof:
-            raise _ClusterError('No profile found for {}'.format(profile))
-        for k, v in prof.args.items():
-            if k not in kwds:
-                kwds[k] = v
+        if self.profile:
+            prof = _conf.get_profile(self.profile)
+            if not prof:
+                raise _ClusterError('No profile found for {}'
+                                    .format(self.profile))
+            _logme.log('Using profile {} for job'.format(self.profile),
+                       'debug')
+            for k, v in prof.args.items():
+                if k not in kwds:
+                    kwds[k] = v
 
-        # Use the default profile as a backup if any arguments missing
-        default_args = _conf.DEFAULT_PROFILES['DEFAULT']
-        default_args.update(_conf.get_profile('DEFAULT').args)
-        for opt, arg in default_args.items():
-            if opt not in kwds:
-                _logme.log('{} not in kwds, adding from default: {}:{}'
-                           .format(opt, opt, arg), 'debug')
-                kwds[opt] = arg
+            # Use the default profile as a backup if any arguments missing
+            default_args = _conf.DEFAULT_PROFILES['DEFAULT']
+            default_args.update(_conf.get_profile('DEFAULT').args)
+            for opt, arg in default_args.items():
+                if opt not in kwds:
+                    _logme.log('{} not in kwds, adding from default: {}:{}'
+                               .format(opt, opt, arg), 'debug')
+                    kwds[opt] = arg
 
         # Set modules
         self.modules = kwds.pop('modules') if 'modules' in kwds else None
@@ -565,13 +569,17 @@ class Job(object):
         if self.args:
             self.args = tuple(_run.listify(self.args))
 
-        # In case cores are passed as None
-        if 'nodes' not in kwds:
-            kwds['nodes'] = default_args['nodes']
-        if 'cores' not in kwds:
-            kwds['cores'] = default_args['cores']
-        self.nodes = kwds['nodes']
-        self.cores = kwds['cores']
+        # Try to guess nodes and cores based on arguments
+        self.nodes = None
+        if 'nodes' in kwds:
+            self.nodes = kwds['nodes']
+        elif 'tasks' and 'tasks_per_node' in kwds:
+            self.nodes = kwds['tasks'] // kwds['tasks_per_node']
+        self.cores = None
+        if 'cores' in kwds:
+            self.cores = kwds['cores']
+        elif 'cpus_per_task' and 'tasks_per_node' in kwds:
+            self.cores = kwds['cpus_per_task'] * kwds['tasks_per_node']
 
         # Set output files
         if 'outfile' in kwds:

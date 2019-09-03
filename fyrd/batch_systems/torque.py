@@ -313,41 +313,28 @@ class TorqueServer(BatchSystemServer):
                 yield (j_id, array_id, job_name, job_owner, job_queue, job_state,
                        nodes, job_threads, scpus, exitcode)
 
-
     def parse_strange_options(self, option_dict):
         """Parse all options that cannot be handled by the regular function.
+        Handled on client side.
 
         Parameters
         ----------
         option_dict : dict
-            All keyword arguments passed by the user that are not already defined
-            in the Job object
+            All keyword arguments passed by the user that are not already
+            defined in the Job object
 
         Returns
         -------
         list
             A list of strings to be added at the top of the script file
         dict
-            Altered version of option_dict with all options that can't be handled
-            by `fyrd.batch_systems.options.option_to_string()` removed.
+            Altered version of option_dict with all options that can't be
+            handled by `fyrd.batch_systems.options.option_to_string()` removed.
         None
-            Would contain additional arguments to pass to qsub, but these are not
-            needed so we just return None
+            Would contain additional arguments to pass to sbatch, but these
+            are not needed so we just return None
         """
-        outlist = []
-        # Handle cores separately
-        nodes = int(option_dict.pop('nodes')) if 'nodes' in option_dict else 1
-        cores = int(option_dict.pop('cores')) if 'cores' in option_dict else 1
-
-        outstring = '#PBS -l nodes={}:ppn={}'.format(nodes, cores)
-        if 'features' in option_dict:
-            outstring += ':' + ':'.join(
-                _run.opt_split(option_dict.pop('features'), (',', ':')))
-        if 'qos' in option_dict:
-            outstring += ',qos={}'.format(option_dict.pop('qos'))
-        outlist.append(outstring)
-
-        return outlist, option_dict, None
+        raise NotImplementedError
 
 
 class TorqueClient(BatchSystemClient):
@@ -439,3 +426,38 @@ class TorqueClient(BatchSystemClient):
             job_id (str)
         """
         return self.get_server().submit(file_name, dependencies=dependencies)
+
+    def parse_strange_options(self, option_dict):
+        """Parse all options that cannot be handled by the regular function.
+
+        Parameters
+        ----------
+        option_dict : dict
+            All keyword arguments passed by the user that are not already defined
+            in the Job object
+
+        Returns
+        -------
+        list
+            A list of strings to be added at the top of the script file
+        dict
+            Altered version of option_dict with all options that can't be handled
+            by `fyrd.batch_systems.options.option_to_string()` removed.
+        None
+            Would contain additional arguments to pass to qsub, but these are not
+            needed so we just return None
+        """
+        outlist = []
+        # Handle cores separately
+        nodes = int(option_dict.pop('nodes')) if 'nodes' in option_dict else 1
+        cores = int(option_dict.pop('cores')) if 'cores' in option_dict else 1
+
+        outstring = '#PBS -l nodes={}:ppn={}'.format(nodes, cores)
+        if 'features' in option_dict:
+            outstring += ':' + ':'.join(
+                _run.opt_split(option_dict.pop('features'), (',', ':')))
+        if 'qos' in option_dict:
+            outstring += ',qos={}'.format(option_dict.pop('qos'))
+        outlist.append(outstring)
+
+        return outlist, option_dict, None

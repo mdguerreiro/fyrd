@@ -724,7 +724,8 @@ def manage_daemon(args):
 
     def _start():
         """Start the daemon process as a fork."""
-        return batch_server.start_server(port=args.port)
+        return batch_server.start_server(port=args.port,
+                                         foreground=args.foreground)
 
     def _stop():
         """Stop the daemon process."""
@@ -1259,6 +1260,10 @@ def command_line_parser():
             '--uri', metavar='uri',
             help=('URI to connect (to disconnect the server or get status)'),
             default=None
+            )
+    server_mode.add_argument(
+            '--foreground', metavar='foreground', action='store_true',
+            help=('Don\'t fork server, leave it in foreground')
             )
     # Set function
     server_mode.set_defaults(func=manage_daemon)

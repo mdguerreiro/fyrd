@@ -516,13 +516,14 @@ class BatchSystemServer(object):
             return True
 
     @classmethod
-    def start_server(cls, host=None, port=None, objId=None):
+    def start_server(cls, host=None, port=None, objId=None, foreground=False):
         """Class method that created the server daemon.
         """
         obj = cls()
-        return obj.daemonize(host=host, port=port, objId=objId)
+        return obj.daemonize(host=host, port=port,
+                             objId=objId, foreground=False)
 
-    def daemonize(self, host=None, port=None, objId=None):
+    def daemonize(self, host=None, port=None, objId=None, foreground=False):
         """Creates the server daemon.
         """
         if self._server_running():
@@ -586,6 +587,9 @@ class BatchSystemServer(object):
             if self._server_running():
                 _logme.log('Server has started correctly', 'info',
                            logfile=_sys.stdout)
+                # Wait for child process to terminate in case of foreground
+                if foreground:
+                    _os.wait()
                 return FYRD_SUCCESS
             else:
                 _logme.log('Server has not started correctly', 'error',
@@ -610,7 +614,7 @@ class BatchSystemServer(object):
         try:
             is_installed = importlib.util.find_spec(module)
             _logme.log(
-                'Module {} is installed?: {}'.format(module, is_installed),
+                'Module {} is installed: {}'.format(module, is_installed),
                 'debug')
 
         # Python3.7 compatibility
