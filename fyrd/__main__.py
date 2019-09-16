@@ -1262,7 +1262,7 @@ def command_line_parser():
             default=None
             )
     server_mode.add_argument(
-            '--foreground', metavar='foreground', action='store_true',
+            '--foreground', action='store_true',
             help=('Don\'t fork server, leave it in foreground')
             )
     # Set function
