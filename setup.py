@@ -101,9 +101,9 @@ setup(
     keywords='slurm torque multiprocessing cluster job_management',
 
     requires=['dill', 'tabulate', 'six', 'tblib', 'psutil'
-              'tqdm', 'Pyro4', 'sqlalchemy', 'cloudpickle'],
+              'tqdm', 'Pyro4', 'sqlalchemy', 'cloudpickle==1.0.0'],
     install_requires=['dill', 'tabulate', 'six', 'Pyro4', 'psutil',
-                      'tblib', 'tqdm', 'sqlalchemy', 'cloudpickle'],
+                      'tblib', 'tqdm', 'sqlalchemy', 'cloudpickle==1.0.0'],
     tests_require=['pytest'],
     packages=['fyrd', 'fyrd/batch_systems'],
     cmdclass=cmdclass,
