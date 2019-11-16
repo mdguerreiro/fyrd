@@ -22,17 +22,20 @@ class Script(object):
 
     written = False
 
+    # _________________________________________________________________________
     @property
     def file_name(self):
         file_name = _os.path.join(self.job_object.scriptpath, self._file_name)
         return file_name
 
+    # _________________________________________________________________________
     def __init__(self, file_name, script, job):
         """Initialize the script and file name."""
         self.script     = script
         self._file_name = file_name
         self.job_object = job
 
+    # _________________________________________________________________________
     def write(self, overwrite=True):
         """Write the script file."""
         _logme.log('Script: Writing {}'.format(self.file_name), 'debug')
@@ -48,6 +51,7 @@ class Script(object):
         else:
             return None
 
+    # _________________________________________________________________________
     def clean(self, delete_output=None):
         """Delete any files made by us."""
         if delete_output:
@@ -56,16 +60,19 @@ class Script(object):
             _logme.log('Script: Deleting {}'.format(self.file_name), 'debug')
             _os.remove(self.file_name)
 
+    # _________________________________________________________________________
     @property
     def exists(self):
         """True if file is on disk, False if not."""
         return _os.path.exists(self.file_name)
 
+    # _________________________________________________________________________
     def __repr__(self):
         """Display simple info."""
         return "Script<{}(exists: {}; written: {})>".format(
             self.file_name, self.exists, self.written)
 
+    # _________________________________________________________________________
     def __str__(self):
         """Print the script."""
         return repr(self) + '::\n\n' + self.script + '\n'
@@ -75,12 +82,14 @@ class Function(Script):
 
     """A special Script used to run a function."""
 
+    # _________________________________________________________________________
     @property
     def pickle_file(self):
         pickle_file = _os.path.join(self.job_object.scriptpath,
                                     self._pickle_file)
         return pickle_file
 
+    # _________________________________________________________________________
     @property
     def outfile(self):
         outfile = _os.path.join(self.job_object.scriptpath, self._outfile)
@@ -172,7 +181,11 @@ class Function(Script):
             if inspect.isclass(obj):
                 # Include the whole MRO list (base classes)
                 cls = obj
-                base_cls = cls.mro()
+                # Support for metaclasses
+                if issubclass(cls, type):
+                    base_cls = cls.mro(cls)
+                else:
+                    base_cls = cls.mro()
                 type_msg = 'class'
 
             # Obj is a function object (class function or local method)
@@ -186,7 +199,11 @@ class Function(Script):
             elif inspect.ismethod(obj):
                 # Include the whole MRO list (base classes)
                 cls = type(obj.__self__)
-                base_cls = cls.mro()
+                # Adds support for metaclasses
+                if issubclass(cls, type):
+                    base_cls = cls.mro(cls)
+                else:
+                    base_cls = cls.mro()
                 type_msg = 'bound method'
 
             # Instance object, get class type
@@ -332,6 +349,7 @@ class Function(Script):
 
         super(Function, self).__init__(file_name, script, job)
 
+    # _________________________________________________________________________
     def write(self, overwrite=True):
         """Write the pickle file and call the parent Script write function."""
         _logme.log('Writing pickle file {}'.format(self.pickle_file), 'debug')
@@ -340,6 +358,7 @@ class Function(Script):
         super(Function, self).write(overwrite)
         self.restore_modules()
 
+    # _________________________________________________________________________
     def restore_modules(self):
         # Restore module imports if they were modified
         if hasattr(self, 'pickle_modules'):
@@ -348,6 +367,7 @@ class Function(Script):
             for cls, orig_module in self.pickle_modules.items():
                 cls.__module__ = orig_module
 
+    # _________________________________________________________________________
     def clean(self, delete_output=False):
         """Delete the input pickle file and any scripts.
 
